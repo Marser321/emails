@@ -10,16 +10,8 @@ export const DATA_DIR = (() => {
   if (isVercel) {
     return '/tmp/emailbuilder-data';
   }
-  // Local dev: prefer the moved folder `app/data`, fallback to sister `../data` if it exists
-  const localAppPath = path.resolve(process.cwd(), 'data');
-  const localSisterPath = path.resolve(process.cwd(), '..', 'data');
-  if (existsSync(localAppPath)) {
-    return localAppPath;
-  }
-  if (existsSync(localSisterPath)) {
-    return localSisterPath;
-  }
-  return localAppPath;
+  // Local dev: use the moved folder `app/data`
+  return path.join(process.cwd(), 'data');
 })();
 
 const BUNDLED_DATA_DIR = path.resolve(process.cwd(), 'data');
