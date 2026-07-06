@@ -1,0 +1,7 @@
+# API keys locales — nunca versionar ni compartir
+app/data/settings.json
+
+# Dependencias y builds de la app
+app/node_modules/
+app/.next/
+app/tsconfig.tsbuildinfo

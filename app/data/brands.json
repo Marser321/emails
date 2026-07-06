@@ -1,0 +1,110 @@
+[
+  {
+    "name": "AMO Managements",
+    "category": "Crédito",
+    "colors": {
+      "primary": "#0B2A4A",
+      "accent": "#29ABE2",
+      "gradientStart": "#29ABE2",
+      "gradientEnd": "#1B6FC4"
+    },
+    "fonts": {
+      "heading": "Montserrat",
+      "body": "Verdana"
+    },
+    "logo": {
+      "type": "text",
+      "value": "AMO|MANAGEMENTS"
+    },
+    "footer": {
+      "tagline": "Mandy, la Chica del Crédito",
+      "subtitle": "Restauración de crédito",
+      "disclaimer": "Este correo no forma parte del sitio web de Facebook ni de Meta Platforms, Inc., ni está avalado por Meta. Los resultados pueden variar según cada caso. AMO Managements no garantiza la eliminación de información precisa y verificable de tu reporte de crédito."
+    },
+    "isFavorite": true,
+    "id": "mr761k2r7u67zwi2n",
+    "createdAt": "2026-07-05T02:22:26.787Z",
+    "updatedAt": "2026-07-05T02:22:26.787Z"
+  },
+  {
+    "name": "Luxe Properties",
+    "category": "Real Estate",
+    "colors": {
+      "primary": "#1a1a2e",
+      "accent": "#c9a84c",
+      "gradientStart": "#c9a84c",
+      "gradientEnd": "#d4af37"
+    },
+    "fonts": {
+      "heading": "Montserrat",
+      "body": "Verdana"
+    },
+    "logo": {
+      "type": "text",
+      "value": "LUXE|PROPERTIES"
+    },
+    "footer": {
+      "tagline": "Tu hogar soñado te espera",
+      "subtitle": "Bienes Raíces de Lujo",
+      "disclaimer": "Las imágenes son ilustrativas. Los precios pueden variar sin previo aviso."
+    },
+    "isFavorite": false,
+    "id": "mr761k2v7vov3dtt7",
+    "createdAt": "2026-07-05T02:22:26.791Z",
+    "updatedAt": "2026-07-05T02:22:26.791Z"
+  },
+  {
+    "name": "VitaFit Studio",
+    "category": "Fitness",
+    "colors": {
+      "primary": "#0d1117",
+      "accent": "#22c55e",
+      "gradientStart": "#22c55e",
+      "gradientEnd": "#16a34a"
+    },
+    "fonts": {
+      "heading": "Montserrat",
+      "body": "Verdana"
+    },
+    "logo": {
+      "type": "text",
+      "value": "VITA|FIT"
+    },
+    "footer": {
+      "tagline": "Transforma tu cuerpo, transforma tu vida",
+      "subtitle": "Fitness & Wellness",
+      "disclaimer": "Consulta a tu médico antes de comenzar cualquier programa de ejercicios."
+    },
+    "isFavorite": false,
+    "id": "mr761k2xjh12f3mqg",
+    "createdAt": "2026-07-05T02:22:26.793Z",
+    "updatedAt": "2026-07-05T02:22:26.793Z"
+  },
+  {
+    "name": "NovaTech Solutions",
+    "category": "Tecnología",
+    "colors": {
+      "primary": "#0f172a",
+      "accent": "#8b5cf6",
+      "gradientStart": "#8b5cf6",
+      "gradientEnd": "#6d28d9"
+    },
+    "fonts": {
+      "heading": "Montserrat",
+      "body": "Verdana"
+    },
+    "logo": {
+      "type": "text",
+      "value": "NOVA|TECH"
+    },
+    "footer": {
+      "tagline": "Innovación sin límites",
+      "subtitle": "Soluciones Tecnológicas",
+      "disclaimer": "Las especificaciones del producto pueden cambiar sin previo aviso."
+    },
+    "isFavorite": true,
+    "id": "mr761k2y179ozs9a6",
+    "createdAt": "2026-07-05T02:22:26.794Z",
+    "updatedAt": "2026-07-05T02:22:26.794Z"
+  }
+]
