@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { deleteHistoryEntry, getHistoryEntry, updateHistoryEntry } from '@/lib/server/historyStore';
+import { authenticationErrorResponse, requireUser } from '@/lib/server/auth';
+import { historyPatchSchema, validationMessage } from '@/lib/server/api-schemas';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -10,6 +12,7 @@ function brandIdFrom(req: Request, body?: Record<string, unknown>): string | nul
 
 export async function GET(req: Request, { params }: Ctx) {
   try {
+    await requireUser();
     const { id } = await params;
     const brandId = brandIdFrom(req);
     if (!brandId) {
@@ -21,6 +24,8 @@ export async function GET(req: Request, { params }: Ctx) {
     }
     return NextResponse.json(entry);
   } catch (error) {
+    const authResponse = authenticationErrorResponse(error);
+    if (authResponse) return authResponse;
     console.error('Error in history GET by id:', error);
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Error al leer el registro' }, { status: 500 });
   }
@@ -28,8 +33,11 @@ export async function GET(req: Request, { params }: Ctx) {
 
 export async function PATCH(req: Request, { params }: Ctx) {
   try {
+    await requireUser();
     const { id } = await params;
-    const body = await req.json();
+    const parsed = historyPatchSchema.safeParse(await req.json());
+    if (!parsed.success) return NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 });
+    const body = parsed.data;
     const brandId = brandIdFrom(req, body);
     if (!brandId) {
       return NextResponse.json({ error: 'brandId es obligatorio' }, { status: 400 });
@@ -39,7 +47,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
     if (typeof body.notes === 'string') patch.notes = body.notes;
     if (typeof body.htmlSnapshot === 'string') patch.htmlSnapshot = body.htmlSnapshot;
     if (typeof body.subject === 'string') patch.subject = body.subject;
-    if (body.content && typeof body.content === 'object') patch.content = body.content;
+    if (body.content) patch.content = body.content;
 
     const updated = await updateHistoryEntry(brandId, id, patch);
     if (!updated) {
@@ -47,6 +55,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
     }
     return NextResponse.json(updated);
   } catch (error) {
+    const authResponse = authenticationErrorResponse(error);
+    if (authResponse) return authResponse;
     console.error('Error in history PATCH:', error);
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Error al actualizar el registro' }, { status: 500 });
   }
@@ -54,6 +64,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
 export async function DELETE(req: Request, { params }: Ctx) {
   try {
+    await requireUser();
     const { id } = await params;
     const brandId = brandIdFrom(req);
     if (!brandId) {
@@ -65,6 +76,8 @@ export async function DELETE(req: Request, { params }: Ctx) {
     }
     return NextResponse.json({ success: true });
   } catch (error) {
+    const authResponse = authenticationErrorResponse(error);
+    if (authResponse) return authResponse;
     console.error('Error in history DELETE:', error);
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Error al eliminar el registro' }, { status: 500 });
   }

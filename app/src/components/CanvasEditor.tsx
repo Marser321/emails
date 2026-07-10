@@ -12,6 +12,8 @@ import {
 import { listAssets, uploadAsset } from '@/lib/assets';
 import { EmailAsset } from '@/lib/types';
 import { useEffect } from 'react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, GripVertical, ImageIcon, LayoutPanelTop, LoaderCircle, Palette, Plus, Upload, X } from 'lucide-react';
+import BlockIcon from './BlockIcon';
 
 // ============ Default block factories ============
 
@@ -39,11 +41,12 @@ interface CanvasEditorProps {
   content: EmailContent;
   brand: Brand | null;
   onContentChange: (updates: Partial<EmailContent>) => void;
+  onOpenDesignHub?: (tab?: 'colors' | 'banners') => void;
 }
 
 // ============ Component ============
 
-export default function CanvasEditor({ content, brand, onContentChange }: CanvasEditorProps) {
+export default function CanvasEditor({ content, brand, onContentChange, onOpenDesignHub }: CanvasEditorProps) {
   const blocks = content.blocks || [];
   const emailWidth = content.emailWidth || 600;
 
@@ -72,8 +75,10 @@ export default function CanvasEditor({ content, brand, onContentChange }: Canvas
   }, [brandId]);
 
   useEffect(() => {
-    refreshAdsets();
-  }, [refreshAdsets]);
+    if (canvasTab === 'adsets') {
+      refreshAdsets();
+    }
+  }, [canvasTab, refreshAdsets]);
 
   // ============ Block manipulation ============
 
@@ -389,7 +394,7 @@ export default function CanvasEditor({ content, brand, onContentChange }: Canvas
 
   const blockLabel = (type: CanvasBlockType) => {
     const item = CANVAS_BLOCK_CATALOG.find(c => c.type === type);
-    return item ? `${item.icon} ${item.label}` : type;
+    return item ? item.label : type;
   };
 
   // ============ Render ============
@@ -549,7 +554,7 @@ export default function CanvasEditor({ content, brand, onContentChange }: Canvas
                   className="block-palette-btn"
                   onClick={() => addBlock(item.type)}
                 >
-                  <span className="palette-icon">{item.icon}</span>
+                  <span className="palette-icon"><BlockIcon type={item.type} size={20} /></span>
                   {item.label}
                 </button>
               ))}
@@ -561,6 +566,17 @@ export default function CanvasEditor({ content, brand, onContentChange }: Canvas
       {/* TAB: Adsets Library */}
       {canvasTab === 'adsets' && (
         <div>
+          <div style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              className="btn btn-primary group w-full"
+              onClick={() => onOpenDesignHub?.('banners')}
+              style={{ padding: '8px 12px', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            >
+              <Palette size={14} /> ✨ Crear Banner / Adset
+            </button>
+          </div>
+
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>
             Subí imágenes y hacé clic en &quot;Usar&quot; para inyectarlas en el bloque activo.
           </p>

@@ -2,10 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { ArrowUpRight, Inbox, Mail, Plus, Search, ThumbsUp } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import EmailHistoryCard from '@/components/EmailHistoryCard';
+import TemplateIcon from '@/components/TemplateIcon';
 import { getAllBrands } from '@/lib/brands';
 import { Brand, EmailHistoryEntry, TEMPLATES } from '@/lib/types';
+import { useHydrated } from '@/hooks/useHydrated';
 
 export default function Dashboard() {
   const [brandCount, setBrandCount] = useState(0);
@@ -14,7 +17,8 @@ export default function Dashboard() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
+  const [now] = useState(() => Date.now());
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = (msg: string) => {
@@ -34,14 +38,17 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    setMounted(true);
     getAllBrands()
       .then(all => {
         setBrands(all);
         setBrandCount(all.length);
       })
       .catch(() => setBrandCount(0));
-    loadHistory('');
+    fetch('/api/history?limit=10')
+      .then(res => (res.ok ? res.json() : []))
+      .then(setHistory)
+      .catch(() => setHistory([]))
+      .finally(() => setHistoryLoading(false));
   }, []);
 
   // Búsqueda con debounce 300ms
@@ -58,7 +65,7 @@ export default function Dashboard() {
   const brandName = (brandId: string) => brands.find(b => b.id === brandId)?.name || 'Marca';
 
   // Stats reales derivadas del historial
-  const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+  const weekAgo = now - 7 * 24 * 3600 * 1000;
   const emailsThisWeek = history.filter(e => new Date(e.createdAt).getTime() > weekAgo).length;
   const rated = history.filter(e => e.rating !== null);
   const upPercent = rated.length ? Math.round((rated.filter(e => e.rating === 'up').length / rated.length) * 100) : null;
@@ -99,11 +106,11 @@ export default function Dashboard() {
           <div className="glass-shell" style={{ marginBottom: 24 }}>
             <div className="glass-core">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 16, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 10, flexWrap: 'wrap' }}>
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                  📬 Hoy — Últimos emails
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Mail size={17} /> Hoy — Últimos emails
                 </h3>
                 <div className="search-box" style={{ width: 280 }}>
-                  <span className="search-icon" aria-hidden="true">🔍</span>
+                  <span className="search-icon" aria-hidden="true"><Search size={15} /></span>
                   <input
                     type="text"
                     className="form-input"
@@ -116,19 +123,19 @@ export default function Dashboard() {
               </div>
 
               {historyLoading ? (
-                <div style={{ display: 'flex', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 12, maxWidth: '100%', minWidth: 0, overflowX: 'auto', paddingBottom: 8 }}>
                   {[0, 1, 2].map(i => (
-                    <div key={i} className="skeleton" style={{ width: 300, height: 140, borderRadius: 'var(--radius-md)', flexShrink: 0 }} />
+                    <div key={i} className="skeleton" style={{ width: 'min(300px, 100%)', height: 140, borderRadius: 'var(--radius-md)', flexShrink: 0 }} />
                   ))}
                 </div>
               ) : history.length === 0 ? (
                 <div className="empty-state" style={{ padding: '26px 10px' }}>
-                  <div className="empty-icon" style={{ fontSize: 30 }}>📭</div>
+                  <div className="empty-icon"><Inbox size={34} /></div>
                   <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', margin: '6px 0 12px' }}>
                     {search ? 'No se encontraron emails con ese criterio.' : 'Todavía no generaste emails. Los que generes con IA aparecerán acá.'}
                   </p>
                   {!search && (
-                    <Link href="/editor" className="btn btn-primary btn-sm">✉️ Crear email</Link>
+                    <Link href="/editor" className="btn btn-primary btn-sm"><Mail size={16} /> Crear email</Link>
                   )}
                 </div>
               ) : (
@@ -154,7 +161,7 @@ export default function Dashboard() {
             <div className="glass-shell" style={{ gridColumn: 'span 2' }}>
               <div className="glass-core" style={{ 
                 height: '100%', 
-                background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(10, 14, 23, 0.7) 100%)',
+                background: 'linear-gradient(135deg, rgba(21, 95, 209, 0.08) 0%, #ffffff 100%)',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
@@ -162,7 +169,7 @@ export default function Dashboard() {
               }}>
                 <div>
                   <span className="badge badge-accent" style={{ marginBottom: 16 }}>
-                    Workspace Activo
+                    Workspace interno
                   </span>
                   <h2 style={{ 
                     fontSize: 26, 
@@ -180,12 +187,12 @@ export default function Dashboard() {
                 </div>
                 <div style={{ display: 'flex', gap: 24, marginTop: 20, borderTop: '1px solid var(--border-subtle)', paddingTop: 16 }}>
                   <div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Servidor local</div>
-                    <div style={{ fontSize: 14, color: 'var(--text-secondary)', fontWeight: 600 }}>Activo (Puerto 3001)</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Biblioteca</div>
+                    <div style={{ fontSize: 14, color: 'var(--text-secondary)', fontWeight: 600 }}>{brandCount} marcas disponibles</div>
                   </div>
                   <div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Motor HTML</div>
-                    <div style={{ fontSize: 14, color: 'var(--text-secondary)', fontWeight: 600 }}>Compatible con GHL</div>
+                    <div style={{ fontSize: 14, color: 'var(--text-secondary)', fontWeight: 600 }}>{TEMPLATES.length} plantillas compatibles con GHL</div>
                   </div>
                 </div>
               </div>
@@ -226,7 +233,7 @@ export default function Dashboard() {
                     }}>{emailsThisWeek}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-muted)', fontSize: 14 }}>Con 👍</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>Con <ThumbsUp size={15} /></span>
                     <span style={{
                       fontSize: 20,
                       fontWeight: 800,
@@ -245,7 +252,7 @@ export default function Dashboard() {
                   color: 'var(--text-accent)',
                   textAlign: 'center'
                 }}>
-                  Diseñado para más de 250 clientes
+                  {history.length} emails recientes en el historial
                 </div>
               </div>
             </div>
@@ -260,19 +267,19 @@ export default function Dashboard() {
                   <Link href="/editor" className="btn btn-primary group" style={{ display: 'flex', justifyContent: 'space-between', paddingRight: 8 }}>
                     <span>Crear email</span>
                     <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white/10 group-hover:translate-x-1 group-hover:-translate-y-0.5 transition-all duration-300" style={{ fontSize: 12 }} aria-hidden="true">
-                      ↗
+                      <ArrowUpRight size={15} />
                     </span>
                   </Link>
                   <Link href="/brands" className="btn btn-secondary group" style={{ display: 'flex', justifyContent: 'space-between', paddingRight: 8 }}>
                     <span>Administrar marcas</span>
                     <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white/5 group-hover:translate-x-1 group-hover:-translate-y-0.5 transition-all duration-300" style={{ fontSize: 12 }} aria-hidden="true">
-                      ↗
+                      <ArrowUpRight size={15} />
                     </span>
                   </Link>
                   <Link href="/brands?action=new" className="btn btn-secondary group" style={{ display: 'flex', justifyContent: 'space-between', paddingRight: 8 }}>
                     <span>Nueva marca</span>
                     <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white/5 group-hover:translate-x-1 group-hover:-translate-y-0.5 transition-all duration-300" style={{ fontSize: 12 }} aria-hidden="true">
-                      ➕
+                      <Plus size={15} />
                     </span>
                   </Link>
                 </div>
@@ -307,7 +314,7 @@ export default function Dashboard() {
                           border: 'none',
                           boxShadow: 'none'
                         }}>
-                          <span style={{ fontSize: 28 }} aria-hidden="true">{t.icon}</span>
+                          <TemplateIcon type={t.type} size={25} color="var(--accent)" />
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 14, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {t.name}
@@ -334,7 +341,7 @@ export default function Dashboard() {
         </div>
 
         {/* Toast */}
-        {toast && <div className="toast success" aria-live="polite"><span>✅</span> {toast}</div>}
+        {toast && <div className="toast success" aria-live="polite">{toast}</div>}
       </main>
     </div>
   );

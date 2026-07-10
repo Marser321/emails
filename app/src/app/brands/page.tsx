@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { Building2, CheckCircle2, Copy, Download, ExternalLink, Plus, Search, Star, Trash2, Upload } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import BrandModal from '@/components/BrandModal';
 import {
@@ -13,16 +14,17 @@ import {
   importBrands,
 } from '@/lib/brands';
 import { Brand, BRAND_CATEGORIES } from '@/lib/types';
+import { useHydrated } from '@/hooks/useHydrated';
 
 function BrandsContent() {
   const searchParams = useSearchParams();
   const [brands, setBrands] = useState<Brand[]>([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Todas');
-  const [modalOpen, setModalOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(() => searchParams.get('action') === 'new');
   const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
 
   const refreshBrands = useCallback(() => {
     searchBrands(search, category)
@@ -31,27 +33,9 @@ function BrandsContent() {
   }, [search, category]);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
     if (!mounted) return;
     refreshBrands();
   }, [mounted, refreshBrands]);
-
-  // Handle URL actions
-  useEffect(() => {
-    if (!mounted) return;
-    const action = searchParams.get('action');
-    if (action === 'new') {
-      setEditingBrand(null);
-      setModalOpen(true);
-    } else if (action === 'export') {
-      handleExport();
-    } else if (action === 'import') {
-      handleImportClick();
-    }
-  }, [searchParams, mounted]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -62,7 +46,7 @@ function BrandsContent() {
     if (confirm(`¿Eliminar la marca "${name}"?`)) {
       await deleteBrand(id);
       refreshBrands();
-      showToast(`🗑️ "${name}" eliminada`);
+      showToast(`"${name}" eliminada`);
     }
   };
 
@@ -75,7 +59,7 @@ function BrandsContent() {
     const dup = await duplicateBrand(id);
     if (dup) {
       refreshBrands();
-      showToast(`📋 "${dup.name}" creada`);
+      showToast(`"${dup.name}" creada`);
     }
   };
 
@@ -88,7 +72,7 @@ function BrandsContent() {
     a.download = `brands-export-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('📤 Marcas exportadas');
+    showToast('Marcas exportadas');
   };
 
   const handleImportClick = () => {
@@ -103,9 +87,9 @@ function BrandsContent() {
         const count = await importBrands(reader.result as string);
         if (count >= 0) {
           refreshBrands();
-          showToast(`📥 ${count} marcas importadas`);
+          showToast(`${count} marcas importadas`);
         } else {
-          showToast('❌ Error al importar');
+          showToast('Error al importar');
         }
       };
       reader.readAsText(file);
@@ -158,15 +142,15 @@ function BrandsContent() {
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <button className="btn btn-secondary btn-sm" onClick={handleImportClick} style={{ gap: 6 }}>
-                <span aria-hidden="true">📥</span> Importar
+                <Upload size={15} aria-hidden="true" /> Importar
               </button>
               <button className="btn btn-secondary btn-sm" onClick={handleExport} style={{ gap: 6 }}>
-                <span aria-hidden="true">📤</span> Exportar
+                <Download size={15} aria-hidden="true" /> Exportar
               </button>
               <button className="btn btn-primary btn-sm group" onClick={() => { setEditingBrand(null); setModalOpen(true); }} style={{ gap: 6, paddingRight: 10 }}>
-                <span aria-hidden="true">➕</span> Nueva marca
+                <Plus size={15} aria-hidden="true" /> Nueva marca
                 <span className="flex items-center justify-center w-5 h-5 rounded-full bg-white/15 group-hover:scale-110 transition-all duration-300" style={{ fontSize: 10 }} aria-hidden="true">
-                  ↗
+                  <ExternalLink size={11} />
                 </span>
               </button>
             </div>
@@ -177,7 +161,7 @@ function BrandsContent() {
           {/* Search & Filters */}
           <div style={{ display: 'flex', gap: 16, marginBottom: 28, flexWrap: 'wrap' }}>
             <div className="search-box" style={{ flex: 1, minWidth: 260 }}>
-              <span className="search-icon" aria-hidden="true">🔍</span>
+              <span className="search-icon" aria-hidden="true"><Search size={17} /></span>
               <input
                 id="brand-search-input"
                 type="text"
@@ -205,11 +189,11 @@ function BrandsContent() {
           {/* Brands Grid */}
           {brands.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-icon" aria-hidden="true">🏢</div>
+              <div className="empty-icon" aria-hidden="true"><Building2 size={34} /></div>
               <h3 style={{ textWrap: 'balance' }}>No hay marcas</h3>
               <p>{search ? 'No se encontraron marcas con ese criterio' : 'Crea tu primera marca para empezar a generar emails personalizados'}</p>
               <button className="btn btn-primary btn-sm" onClick={() => { setEditingBrand(null); setModalOpen(true); }}>
-                ➕ Crear marca
+                <Plus size={15} aria-hidden="true" /> Crear marca
               </button>
             </div>
           ) : (
@@ -246,7 +230,7 @@ function BrandsContent() {
                             cursor: 'pointer'
                           }}
                         >
-                          {brand.isFavorite ? '★' : '☆'}
+                          <Star size={13} fill={brand.isFavorite ? 'currentColor' : 'none'} />
                         </button>
                       </div>
                       
@@ -290,7 +274,7 @@ function BrandsContent() {
                           aria-label={`Duplicar marca ${brand.name}`}
                           style={{ padding: 4, width: 28, height: 28, fontSize: 12, borderRadius: '6px' }}
                         >
-                          📋
+                          <Copy size={14} />
                         </button>
                         <button
                           className="btn btn-danger"
@@ -299,7 +283,7 @@ function BrandsContent() {
                           aria-label={`Eliminar marca ${brand.name}`}
                           style={{ padding: 4, width: 28, height: 28, fontSize: 12, borderRadius: '6px' }}
                         >
-                          🗑️
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
@@ -318,14 +302,14 @@ function BrandsContent() {
             onClose={handleModalClose}
             onSaved={() => {
               refreshBrands();
-              showToast(editingBrand ? '✅ Marca actualizada' : '✅ Marca creada');
+              showToast(editingBrand ? 'Marca actualizada' : 'Marca creada');
               handleModalClose();
             }}
           />
         )}
 
         {/* Toast */}
-        {toast && <div className="toast success" aria-live="polite"><span>✅</span> {toast}</div>}
+        {toast && <div className="toast success" aria-live="polite"><CheckCircle2 size={17} aria-hidden="true" /> {toast}</div>}
       </main>
     </div>
   );

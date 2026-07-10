@@ -40,6 +40,9 @@ export interface BrandFooter {
   tagline: string;
   subtitle: string;
   disclaimer: string;
+  address?: string;
+  unsubscribeLabel?: string;
+  unsubscribeUrl?: string;
 }
 
 export interface Brand {
@@ -202,19 +205,19 @@ export type BlockConfig =
   | FooterBlockConfig;
 
 // Metadata for the block palette UI
-export const CANVAS_BLOCK_CATALOG: { type: CanvasBlockType; icon: string; label: string }[] = [
-  { type: 'header',     icon: '🏷️', label: 'Header' },
-  { type: 'hero',       icon: '🖼️', label: 'Imagen Hero' },
-  { type: 'text',       icon: '📝', label: 'Texto' },
-  { type: 'image-text', icon: '📰', label: 'Imagen + Texto' },
-  { type: 'gallery',    icon: '🎞️', label: 'Galería' },
-  { type: 'bullets',    icon: '✅', label: 'Bullets' },
-  { type: 'infobox',    icon: '📅', label: 'Info Box' },
-  { type: 'quote',      icon: '💬', label: 'Testimonio' },
-  { type: 'cta',        icon: '🔘', label: 'Botón CTA' },
-  { type: 'divider',    icon: '➖', label: 'Separador' },
-  { type: 'spacer',     icon: '↕️', label: 'Espaciador' },
-  { type: 'footer',     icon: '📄', label: 'Footer' },
+export const CANVAS_BLOCK_CATALOG: { type: CanvasBlockType; label: string }[] = [
+  { type: 'header', label: 'Header' },
+  { type: 'hero', label: 'Imagen Hero' },
+  { type: 'text', label: 'Texto' },
+  { type: 'image-text', label: 'Imagen + Texto' },
+  { type: 'gallery', label: 'Galería' },
+  { type: 'bullets', label: 'Bullets' },
+  { type: 'infobox', label: 'Info Box' },
+  { type: 'quote', label: 'Testimonio' },
+  { type: 'cta', label: 'Botón CTA' },
+  { type: 'divider', label: 'Separador' },
+  { type: 'spacer', label: 'Espaciador' },
+  { type: 'footer', label: 'Footer' },
 ];
 
 // Generate a short random ID for canvas blocks
@@ -223,6 +226,8 @@ export function generateBlockId(): string {
 }
 
 export interface EmailContent {
+  subject?: string;
+  preheader?: string;
   label: string;
   headline: string;
   body: string;
@@ -250,6 +255,32 @@ export interface EmailContent {
   // ===== Canvas modular (v2) =====
   emailWidth?: number;   // Max container width in px (default 600)
   blocks?: BlockConfig[]; // When present, the canvas renderer is used
+  compliance?: EmailCompliance;
+}
+
+export interface EmailTheme {
+  pageBackground: string;
+  bodyBackground: string;
+  emailWidth: number;
+}
+
+export interface EmailCompliance {
+  unsubscribeLabel: string;
+  unsubscribeUrl: string;
+  address: string;
+}
+
+export interface EmailDocumentV3 {
+  schemaVersion: 3;
+  brandId: string;
+  template: TemplateType;
+  subject: string;
+  preheader: string;
+  locale: 'es';
+  emailWidth: number;
+  theme: EmailTheme;
+  blocks: BlockConfig[];
+  compliance: EmailCompliance;
 }
 
 export type TemplateType = 
@@ -266,7 +297,6 @@ export type TemplateType =
 export interface TemplateConfig {
   type: TemplateType;
   name: string;
-  icon: string;
   description: string;
   defaultContent: Partial<EmailContent>;
   defaultLayout?: LayoutVariant;
@@ -301,22 +331,33 @@ export interface Draft {
   date: string;
 }
 
-// Configuración de la app (data/settings.json — server-side, contiene API keys)
+// Configuración no sensible. Las credenciales solo viven en variables de entorno.
 export interface AppSettings {
-  geminiApiKey?: string;
-  anthropicApiKey?: string;
   defaultEngine: AIEngine;
   assetsPublicBaseUrl?: string;
   migratedFromLocalStorage?: boolean;
 }
 
-// Imagen de la biblioteca de assets (data/assets/<brandId>/)
+// Imagen de la biblioteca de assets (Storage + tabla public.assets)
 export interface EmailAsset {
+  id: string;
   filename: string;
   brandId: string;
   url: string;
   size: number;
   modifiedAt: string;
+  kind: 'logo' | 'hero' | 'tile' | 'icon' | 'other';
+  altText: string;
+  width: number;
+  height: number;
+  mimeType: string;
+  variant: 'email' | 'thumbnail' | 'source';
+  createdBy?: string;
+  thumbnailUrl?: string;
+  author: string;
+  createdAt: string;
+  sourcePrompt?: string;
+  intendedUse?: string;
 }
 
 // Default brand for new entries
@@ -341,6 +382,9 @@ export const DEFAULT_BRAND: Omit<Brand, 'id' | 'createdAt' | 'updatedAt'> = {
     tagline: '',
     subtitle: '',
     disclaimer: '',
+    address: '{{location.full_address}}',
+    unsubscribeLabel: 'Cancelar suscripción',
+    unsubscribeUrl: '{{unsubscribe}}',
   },
   isFavorite: false,
 };
@@ -350,7 +394,6 @@ export const TEMPLATES: TemplateConfig[] = [
   {
     type: 'masterclass',
     name: 'Masterclass',
-    icon: '🎓',
     description: 'Invitación a clase en vivo o webinar',
     defaultContent: {
       label: 'Masterclass gratuita',
@@ -363,7 +406,6 @@ export const TEMPLATES: TemplateConfig[] = [
   {
     type: 'registration',
     name: 'Registro',
-    icon: '✅',
     description: 'Confirmación de registro o bienvenida',
     defaultContent: {
       label: 'Registro confirmado',
@@ -376,7 +418,6 @@ export const TEMPLATES: TemplateConfig[] = [
   {
     type: 'followup',
     name: 'Seguimiento',
-    icon: '📨',
     description: 'Follow-up post evento o consulta',
     defaultContent: {
       label: 'Seguimiento',
@@ -389,7 +430,6 @@ export const TEMPLATES: TemplateConfig[] = [
   {
     type: 'promo',
     name: 'Promoción',
-    icon: '🔥',
     description: 'Ofertas, descuentos y lanzamientos',
     defaultContent: {
       label: 'Oferta exclusiva',
@@ -402,7 +442,6 @@ export const TEMPLATES: TemplateConfig[] = [
   {
     type: 'reminder',
     name: 'Recordatorio',
-    icon: '⏰',
     description: 'Recordatorio de evento, cita o pago',
     defaultContent: {
       label: 'Recordatorio',
@@ -415,7 +454,6 @@ export const TEMPLATES: TemplateConfig[] = [
   {
     type: 'newsletter',
     name: 'Newsletter',
-    icon: '📰',
     description: 'Contenido informativo y novedades',
     defaultContent: {
       label: 'Newsletter',
@@ -428,7 +466,6 @@ export const TEMPLATES: TemplateConfig[] = [
   {
     type: 'sales',
     name: 'Venta Directa',
-    icon: '🛒',
     description: 'Ofertas comerciales y lanzamientos de productos',
     defaultContent: {
       label: 'Nuevo Lanzamiento',
@@ -441,7 +478,6 @@ export const TEMPLATES: TemplateConfig[] = [
   {
     type: 'financial_advisory',
     name: 'Asesoría Financiera',
-    icon: '📈',
     description: 'Actualización de mercado, revisión de portafolio o citas',
     defaultContent: {
       label: 'Update Financiero',
@@ -454,7 +490,6 @@ export const TEMPLATES: TemplateConfig[] = [
   {
     type: 'onboarding',
     name: 'Bienvenida',
-    icon: '👋',
     description: 'Onboarding para nuevos clientes o usuarios',
     defaultContent: {
       label: '¡Te damos la bienvenida!',

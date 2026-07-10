@@ -1,71 +1,44 @@
 import { NextResponse } from 'next/server';
+import { ZodError } from 'zod';
+import { createEmailDocument, documentToContent } from '@/lib/email-document';
 import { getProvider, MissingApiKeyError } from '@/lib/server/ai';
+import { generateRequestSchema, validationMessage } from '@/lib/server/api-schemas';
+import { requireUser, AuthenticationError } from '@/lib/server/auth';
 import { getBrandById } from '@/lib/server/brandStore';
 import { addHistoryEntry, getTopRatedExamples } from '@/lib/server/historyStore';
-import { Brand, EmailContent } from '@/lib/types';
+import type { Brand, EmailContent } from '@/lib/types';
 
 export async function POST(req: Request) {
   try {
-    const { prompt, templateType, brand, brandId, engine, userApiKey } = await req.json();
+    const user = await requireUser();
+    const input = generateRequestSchema.parse(await req.json());
+    const suppliedBrand = input.brand as Brand | undefined;
+    const brandId = input.brandId || suppliedBrand?.id;
+    const brand = brandId ? (await getBrandById(brandId)) || suppliedBrand : suppliedBrand;
+    if (!brand) return NextResponse.json({ error: 'Marca no encontrada.' }, { status: 400 });
 
-    if (!prompt?.trim()) {
-      return NextResponse.json({ error: 'La instrucción no puede estar vacía.' }, { status: 400 });
-    }
+    const provider = await getProvider(input.engine);
+    const examples = await getTopRatedExamples(brand.id, 3);
+    const content = await provider.generate({ prompt: input.prompt, templateType: input.templateType, brand, examples }) as EmailContent;
+    content.subject ||= content.headline;
+    content.preheader ||= content.body?.replace(/\s+/g, ' ').slice(0, 110);
+    const document = createEmailDocument(brand, input.templateType, content);
 
-    // Marca fresca desde disco (voz actualizada); fallback al objeto enviado por el cliente
-    const resolvedBrandId: string | undefined = brandId || brand?.id;
-    const freshBrand: Brand | undefined = resolvedBrandId
-      ? (await getBrandById(resolvedBrandId)) ?? brand
-      : brand;
-
-    if (!freshBrand) {
-      return NextResponse.json({ error: 'Marca no encontrada.' }, { status: 400 });
-    }
-
-    const provider = await getProvider(engine, userApiKey);
-    const examples = freshBrand.id ? await getTopRatedExamples(freshBrand.id, 3) : [];
-
-    if (process.env.DEBUG_PROMPTS) {
-      const { buildGenerateSystemPrompt } = await import('@/lib/server/prompts');
-      console.log('[DEBUG_PROMPTS] generate system prompt:\n', buildGenerateSystemPrompt(freshBrand, examples));
-    }
-
-    const data = await provider.generate({
-      prompt,
-      templateType,
-      brand: freshBrand,
-      examples,
-    });
-
-    // Registro de historial — el aprendizaje diario nace acá
     let historyId: string | undefined;
-    if (freshBrand.id) {
-      try {
-        const entry = await addHistoryEntry({
-          brandId: freshBrand.id,
-          templateType,
-          engine: provider.engine,
-          model: provider.model,
-          prompt,
-          subject: data.headline || '',
-          content: data as EmailContent,
-          htmlSnapshot: '',
-          rating: null,
-          notes: '',
-        });
-        historyId = entry.id;
-      } catch (e) {
-        console.error('Error saving history entry:', e);
-      }
+    try {
+      const entry = await addHistoryEntry({
+        brandId: brand.id, templateType: input.templateType, engine: provider.engine, model: provider.model,
+        prompt: input.prompt, subject: document.subject, content: documentToContent(document),
+        htmlSnapshot: '', rating: null, notes: '',
+      }, user.id);
+      historyId = entry.id;
+    } catch (error) {
+      console.error('No se pudo guardar el historial:', error instanceof Error ? error.message : 'error desconocido');
     }
-
-    return NextResponse.json({ ...data, historyId, engine: provider.engine });
+    return NextResponse.json({ document, historyId, engine: provider.engine });
   } catch (error) {
-    console.error('Error in generate API:', error);
-    const status = error instanceof MissingApiKeyError ? 400 : 500;
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Error al generar el correo con IA' },
-      { status }
-    );
+    if (error instanceof AuthenticationError) return NextResponse.json({ error: error.message }, { status: 401 });
+    if (error instanceof ZodError) return NextResponse.json({ error: validationMessage(error) }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Error al generar el correo' }, { status: error instanceof MissingApiKeyError ? 400 : 500 });
   }
 }

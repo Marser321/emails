@@ -1,157 +1,158 @@
+import { promises as fs } from 'node:fs';
 import { EmailHistoryEntry } from '@/lib/types';
-import { supabase } from './supabase';
+import { createServerSupabase } from '@/lib/supabase/server';
+import { isSupabaseConfigured } from './env';
+import { dataPath, readJson, withFileLock, writeJson } from './storage';
+
+interface HistoryRow {
+  id: string;
+  brand_id: string;
+  template_type: EmailHistoryEntry['templateType'];
+  engine: EmailHistoryEntry['engine'];
+  model: string;
+  prompt: string | null;
+  subject: string;
+  content: EmailHistoryEntry['content'];
+  html_snapshot: string | null;
+  rating: EmailHistoryEntry['rating'];
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by?: string | null;
+  schema_version?: number;
+}
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 11);
 }
 
-// Convert snake_case from DB to camelCase for History object
-function mapHistoryFromDB(dbEntry: any): EmailHistoryEntry {
+function mapHistoryFromDB(row: HistoryRow): EmailHistoryEntry {
   return {
-    id: dbEntry.id,
-    brandId: dbEntry.brand_id,
-    templateType: dbEntry.template_type,
-    engine: dbEntry.engine,
-    model: dbEntry.model,
-    prompt: dbEntry.prompt,
-    subject: dbEntry.subject,
-    content: dbEntry.content,
-    htmlSnapshot: dbEntry.html_snapshot,
-    rating: dbEntry.rating,
-    notes: dbEntry.notes,
-    createdAt: dbEntry.created_at,
-    updatedAt: dbEntry.updated_at,
+    id: row.id,
+    brandId: row.brand_id,
+    templateType: row.template_type,
+    engine: row.engine,
+    model: row.model,
+    prompt: row.prompt || '',
+    subject: row.subject,
+    content: row.content,
+    htmlSnapshot: row.html_snapshot || '',
+    rating: row.rating,
+    notes: row.notes || '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
-export async function listHistory(brandId?: string, limit?: number, query?: string): Promise<EmailHistoryEntry[]> {
-  let qb = supabase.from('history').select('*').order('created_at', { ascending: false });
-
-  if (brandId) {
-    qb = qb.eq('brand_id', brandId);
-  }
-
-  if (limit) {
-    qb = qb.limit(limit);
-  }
-
-  const { data, error } = await qb;
-  if (error) {
-    console.error('Error listing history:', error);
-    return [];
-  }
-
-  let entries = (data || []).map(mapHistoryFromDB);
-
-  if (query) {
-    const q = query.toLowerCase();
-    entries = entries.filter(e =>
-      e.subject?.toLowerCase().includes(q) ||
-      e.prompt?.toLowerCase().includes(q)
-    );
-  }
-
-  return entries;
+function localFile(brandId: string) {
+  return `history/${brandId}.json`;
 }
 
-export async function addHistoryEntry(
-  entry: Omit<EmailHistoryEntry, 'id' | 'createdAt' | 'updatedAt'>
-): Promise<EmailHistoryEntry> {
+async function allLocalHistory(): Promise<EmailHistoryEntry[]> {
+  try {
+    const files = (await fs.readdir(dataPath('history'))).filter(file => file.endsWith('.json'));
+    const groups = await Promise.all(files.map(file => readJson<EmailHistoryEntry[]>(`history/${file}`, [])));
+    return groups.flat();
+  } catch {
+    return [];
+  }
+}
+
+export async function listHistory(brandId?: string, limit?: number, query?: string): Promise<EmailHistoryEntry[]> {
+  let entries: EmailHistoryEntry[];
+  if (!isSupabaseConfigured()) {
+    entries = brandId ? await readJson(localFile(brandId), []) : await allLocalHistory();
+  } else {
+    const supabase = await createServerSupabase();
+    let request = supabase.from('history').select('*').order('created_at', { ascending: false });
+    if (brandId) request = request.eq('brand_id', brandId);
+    if (limit) request = request.limit(limit);
+    const { data, error } = await request;
+    if (error) throw new Error(error.message);
+    entries = ((data || []) as HistoryRow[]).map(mapHistoryFromDB);
+  }
+  if (query) {
+    const normalized = query.toLocaleLowerCase('es');
+    entries = entries.filter(entry => `${entry.subject} ${entry.prompt}`.toLocaleLowerCase('es').includes(normalized));
+  }
+  entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return limit ? entries.slice(0, limit) : entries;
+}
+
+export async function addHistoryEntry(entry: Omit<EmailHistoryEntry, 'id' | 'createdAt' | 'updatedAt'>, createdBy?: string): Promise<EmailHistoryEntry> {
   const now = new Date().toISOString();
   const full: EmailHistoryEntry = { ...entry, id: generateId(), createdAt: now, updatedAt: now };
-
-  const { error } = await supabase.from('history').insert({
-    id: full.id,
-    brand_id: full.brandId,
-    template_type: full.templateType,
-    engine: full.engine,
-    model: full.model,
-    prompt: full.prompt || null,
-    subject: full.subject,
-    content: full.content,
-    html_snapshot: full.htmlSnapshot || null,
-    rating: full.rating || null,
-    notes: full.notes || null,
-    created_at: full.createdAt,
-    updated_at: full.updatedAt,
-  });
-
-  if (error) {
-    console.error('Error adding history entry:', error);
-    throw new Error(error.message);
+  if (!isSupabaseConfigured()) {
+    const file = localFile(full.brandId);
+    return withFileLock(file, async () => {
+      const entries = await readJson<EmailHistoryEntry[]>(file, []);
+      entries.unshift(full);
+      await writeJson(file, entries);
+      return full;
+    });
   }
-
+  const supabase = await createServerSupabase();
+  const { error } = await supabase.from('history').insert({
+    id: full.id, brand_id: full.brandId, template_type: full.templateType,
+    engine: full.engine, model: full.model, prompt: full.prompt || null,
+    subject: full.subject, content: full.content, html_snapshot: full.htmlSnapshot || null,
+    rating: full.rating, notes: full.notes || null, created_at: full.createdAt, updated_at: full.updatedAt,
+    created_by: createdBy || null, schema_version: 3,
+  });
+  if (error) throw new Error(error.message);
   return full;
 }
 
 export async function updateHistoryEntry(
-  brandId: string, // Kept for API compatibility, though we can just use id
+  brandId: string,
   id: string,
-  patch: Partial<Pick<EmailHistoryEntry, 'rating' | 'notes' | 'htmlSnapshot' | 'subject' | 'content'>>
+  patch: Partial<Pick<EmailHistoryEntry, 'rating' | 'notes' | 'htmlSnapshot' | 'subject' | 'content'>>,
 ): Promise<EmailHistoryEntry | null> {
-  const updates: any = { updated_at: new Date().toISOString() };
+  if (!isSupabaseConfigured()) {
+    const file = localFile(brandId);
+    return withFileLock(file, async () => {
+      const entries = await readJson<EmailHistoryEntry[]>(file, []);
+      const index = entries.findIndex(entry => entry.id === id);
+      if (index < 0) return null;
+      entries[index] = { ...entries[index], ...patch, updatedAt: new Date().toISOString() };
+      await writeJson(file, entries);
+      return entries[index];
+    });
+  }
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (patch.rating !== undefined) updates.rating = patch.rating;
   if (patch.notes !== undefined) updates.notes = patch.notes;
   if (patch.htmlSnapshot !== undefined) updates.html_snapshot = patch.htmlSnapshot;
   if (patch.subject !== undefined) updates.subject = patch.subject;
   if (patch.content !== undefined) updates.content = patch.content;
-
-  const { data, error } = await supabase
-    .from('history')
-    .update(updates)
-    .eq('id', id)
-    .eq('brand_id', brandId) // ensure safety
-    .select()
-    .single();
-
-  if (error || !data) {
-    console.error('Error updating history entry:', error);
-    return null;
-  }
-
-  return mapHistoryFromDB(data);
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase.from('history').update(updates).eq('id', id).eq('brand_id', brandId).select().maybeSingle();
+  return error || !data ? null : mapHistoryFromDB(data as HistoryRow);
 }
 
 export async function deleteHistoryEntry(brandId: string, id: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('history')
-    .delete()
-    .eq('id', id)
-    .eq('brand_id', brandId);
-
-  if (error) {
-    console.error('Error deleting history entry:', error);
-    return false;
+  if (!isSupabaseConfigured()) {
+    const file = localFile(brandId);
+    return withFileLock(file, async () => {
+      const entries = await readJson<EmailHistoryEntry[]>(file, []);
+      const filtered = entries.filter(entry => entry.id !== id);
+      if (filtered.length === entries.length) return false;
+      await writeJson(file, filtered);
+      return true;
+    });
   }
-  return true;
+  const supabase = await createServerSupabase();
+  const { error } = await supabase.from('history').delete().eq('id', id).eq('brand_id', brandId);
+  return !error;
 }
 
 export async function getHistoryEntry(brandId: string, id: string): Promise<EmailHistoryEntry | undefined> {
-  const { data, error } = await supabase
-    .from('history')
-    .select('*')
-    .eq('id', id)
-    .eq('brand_id', brandId)
-    .single();
-
-  if (error || !data) return undefined;
-  return mapHistoryFromDB(data);
+  if (!isSupabaseConfigured()) return (await readJson<EmailHistoryEntry[]>(localFile(brandId), [])).find(entry => entry.id === id);
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase.from('history').select('*').eq('id', id).eq('brand_id', brandId).maybeSingle();
+  return error || !data ? undefined : mapHistoryFromDB(data as HistoryRow);
 }
 
-// Few-shot: los emails mejor valorados (👍), más recientes primero
-export async function getTopRatedExamples(brandId: string, n: number): Promise<EmailHistoryEntry[]> {
-  const { data, error } = await supabase
-    .from('history')
-    .select('*')
-    .eq('brand_id', brandId)
-    .eq('rating', 'up')
-    .order('created_at', { ascending: false })
-    .limit(n);
-
-  if (error) {
-    console.error('Error getting top rated examples:', error);
-    return [];
-  }
-
-  return (data || []).map(mapHistoryFromDB);
+export async function getTopRatedExamples(brandId: string, count: number): Promise<EmailHistoryEntry[]> {
+  return (await listHistory(brandId)).filter(entry => entry.rating === 'up').slice(0, count);
 }

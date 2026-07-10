@@ -1,26 +1,18 @@
 import { NextResponse } from 'next/server';
+import { ZodError } from 'zod';
 import { getProvider, MissingApiKeyError } from '@/lib/server/ai';
+import { abTestRequestSchema, validationMessage } from '@/lib/server/api-schemas';
+import { requireUser, AuthenticationError } from '@/lib/server/auth';
 
 export async function POST(req: Request) {
   try {
-    const { headline, body, engine, userApiKey } = await req.json();
-
-    if (!headline && !body) {
-      return NextResponse.json(
-        { error: 'El contenido del email no puede estar vacío.' },
-        { status: 400 }
-      );
-    }
-
-    const provider = await getProvider(engine, userApiKey);
-    const data = await provider.abTest({ headline: headline || '', body: body || '' });
-    return NextResponse.json(data);
+    await requireUser();
+    const input = abTestRequestSchema.parse(await req.json());
+    const provider = await getProvider(input.engine);
+    return NextResponse.json(await provider.abTest({ headline: input.headline, body: input.body }));
   } catch (error) {
-    console.error('Error in ab-test API:', error);
-    const status = error instanceof MissingApiKeyError ? 400 : 500;
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Error al generar variantes A/B' },
-      { status }
-    );
+    if (error instanceof AuthenticationError) return NextResponse.json({ error: error.message }, { status: 401 });
+    if (error instanceof ZodError) return NextResponse.json({ error: validationMessage(error) }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Error al generar variantes' }, { status: error instanceof MissingApiKeyError ? 400 : 500 });
   }
 }

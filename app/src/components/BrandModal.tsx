@@ -5,6 +5,7 @@ import { Brand, BRAND_CATEGORIES } from '@/lib/types';
 import { createBrand, updateBrand } from '@/lib/brands';
 import { uploadAsset } from '@/lib/assets';
 import AssetPicker from '@/components/AssetPicker';
+import { ImageIcon, Library, LoaderCircle, Mic2, Pencil, Plus, Save, Type, Upload, X } from 'lucide-react';
 
 interface BrandModalProps {
   brand: Brand | null;
@@ -24,6 +25,63 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
   const [logoPickerOpen, setLogoPickerOpen] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoFileRef = useRef<HTMLInputElement>(null);
+
+  // Estados para importación automática desde URL
+  const [importUrl, setImportUrl] = useState('');
+  const [analyzingUrl, setAnalyzingUrl] = useState(false);
+  const [scrapeError, setScrapeError] = useState('');
+
+  const handleScrapeBrand = async () => {
+    if (!importUrl.trim()) return;
+    setAnalyzingUrl(true);
+    setScrapeError('');
+    try {
+      const res = await fetch('/api/brand-scraper', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: importUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al analizar el sitio');
+
+      const scraped = data.brand;
+      if (scraped) {
+        setForm({
+          name: scraped.name || '',
+          category: scraped.category || 'General',
+          colorPrimary: scraped.colors.primary || '#0B2A4A',
+          colorAccent: scraped.colors.accent || '#29ABE2',
+          colorGradientStart: scraped.colors.gradientStart || '#29ABE2',
+          colorGradientEnd: scraped.colors.gradientEnd || '#1B6FC4',
+          fontHeading: scraped.fonts?.heading || 'Montserrat',
+          fontBody: scraped.fonts?.body || 'Verdana',
+          logoType: scraped.logo?.type || 'text',
+          logoValue: scraped.logo?.value || '',
+          logoImageWidth: scraped.logo?.imageWidth || 180,
+          logoShowName: scraped.logo?.showName || false,
+          logoNamePosition: scraped.logo?.namePosition || 'right',
+          footerTagline: scraped.footer?.tagline || '',
+          footerSubtitle: scraped.footer?.subtitle || '',
+          footerDisclaimer: scraped.footer?.disclaimer || '',
+          voiceTone: scraped.voice?.toneOfVoice || '',
+          voiceAudience: scraped.voice?.audience || '',
+          voiceStyleNotes: scraped.voice?.styleNotes || '',
+        });
+        if (scraped.voice?.samplePhrases) {
+          setSamplePhrases(scraped.voice.samplePhrases);
+        }
+        if (scraped.voice?.toneOfVoice || scraped.voice?.audience || scraped.voice?.styleNotes || scraped.voice?.samplePhrases?.length) {
+          setVoiceOpen(true);
+        }
+        setImportUrl('');
+      }
+    } catch (err) {
+      console.error(err);
+      setScrapeError(err instanceof Error ? err.message : 'Error al conectar con el scraper');
+    } finally {
+      setAnalyzingUrl(false);
+    }
+  };
 
   const [form, setForm] = useState({
     name: '',
@@ -171,6 +229,59 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
           </div>
 
           <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto', padding: '24px' }}>
+            {/* Scraper / Auto-importador de marca desde URL */}
+            {!isEditing && (
+              <div 
+                className="glass-shell" 
+                style={{ 
+                  marginBottom: 20, 
+                  background: 'rgba(99, 102, 241, 0.03)', 
+                  border: '1px dashed var(--border-hover)',
+                  borderRadius: 'var(--radius-md)'
+                }}
+              >
+                <div className="glass-core" style={{ padding: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 12, color: 'var(--accent-light)', marginBottom: 8 }}>
+                    <span>🌐</span> AUTO-IMPORTAR MARCA DESDE SITIO WEB
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      type="url"
+                      className="form-input"
+                      placeholder="https://ejemplo.com"
+                      value={importUrl}
+                      onChange={e => setImportUrl(e.target.value)}
+                      style={{ fontSize: 12, padding: '8px 10px', flex: 1 }}
+                      disabled={analyzingUrl}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={handleScrapeBrand}
+                      disabled={analyzingUrl || !importUrl.trim()}
+                      style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', flexShrink: 0 }}
+                    >
+                      {analyzingUrl ? (
+                        <>
+                          <LoaderCircle size={12} className="spin" /> Analizando...
+                        </>
+                      ) : (
+                        'Analizar Sitio'
+                      )}
+                    </button>
+                  </div>
+                  {scrapeError && (
+                    <div style={{ fontSize: 11, color: 'var(--error)', marginTop: 6 }}>
+                      ⚠️ {scrapeError}
+                    </div>
+                  )}
+                  <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.3 }}>
+                    Nuestra IA extraerá colores, logos, textos y el tono de comunicación para rellenar este formulario automáticamente.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Name & Category */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
               <div className="form-group" style={{ margin: 0 }}>

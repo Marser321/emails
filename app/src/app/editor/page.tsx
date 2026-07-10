@@ -5,11 +5,13 @@ import { useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import AssetPicker from '@/components/AssetPicker';
 import CanvasEditor from '@/components/CanvasEditor';
+import VisualDesignHub from '@/components/VisualDesignHub';
 import ExportModal from '@/components/ExportModal';
-import { getAllBrands } from '@/lib/brands';
+import { getAllBrands, updateBrand } from '@/lib/brands';
 import { collectLocalAssetUrls } from '@/lib/export';
 import { renderEmail } from '@/lib/templates';
 import { AIEngine, Brand, Draft, EmailContent, LayoutVariant, TemplateType, TEMPLATES } from '@/lib/types';
+import { Palette } from 'lucide-react';
 
 const LAYOUT_OPTIONS: { id: LayoutVariant; name: string; icon: string; description: string }[] = [
   { id: 'classic', name: 'Clásico', icon: '📄', description: 'Header con gradiente, el layout original' },
@@ -107,6 +109,8 @@ function EditorContent() {
   const [testMessageUrl, setTestMessageUrl] = useState<string | null>(null);
   const [simulatedDarkMode, setSimulatedDarkMode] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(600);
+  const [designHubOpen, setDesignHubOpen] = useState(false);
+  const [designHubTab, setDesignHubTab] = useState<'colors' | 'banners'>('colors');
 
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     brand: true,
@@ -1252,7 +1256,17 @@ function EditorContent() {
                                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelectedTemplate(t.type); }}
                                   style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 10px', borderRadius: 'var(--radius-md)' }}
                                 >
-                                  <div className="template-icon" style={{ fontSize: 24 }} aria-hidden="true">{t.icon}</div>
+                                  <div className="template-icon" style={{ fontSize: 24 }} aria-hidden="true">
+                                    {t.type === 'masterclass' ? '🎓' :
+                                     t.type === 'registration' ? '📝' :
+                                     t.type === 'followup' ? '🤝' :
+                                     t.type === 'promo' ? '🔥' :
+                                     t.type === 'reminder' ? '📌' :
+                                     t.type === 'newsletter' ? '📰' :
+                                     t.type === 'sales' ? '🛍️' :
+                                     t.type === 'financial_advisory' ? '💼' :
+                                     t.type === 'onboarding' ? '👋' : '📄'}
+                                  </div>
                                   <div className="template-name" style={{ fontSize: 12, fontWeight: 600 }}>{t.name}</div>
                                 </div>
                               ))}
@@ -1542,6 +1556,20 @@ function EditorContent() {
                       </button>
                       {expandedSections.styles && (
                         <div className="accordion-content">
+                          <div style={{ marginBottom: 12 }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary w-full group"
+                              onClick={() => {
+                                setDesignHubTab('colors');
+                                setDesignHubOpen(true);
+                              }}
+                              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'var(--bg-primary)', borderColor: 'var(--border-subtle)', padding: '8px 12px', fontSize: 12 }}
+                            >
+                              <Palette size={14} className="text-accent" /> Asistente de Paleta de Colores y Legibilidad
+                            </button>
+                          </div>
+
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                             <div className="form-group">
                               <label htmlFor="email-bg-color" className="form-label">Fondo Email</label>
@@ -1932,6 +1960,10 @@ function EditorContent() {
                     content={content}
                     brand={selectedBrand || null}
                     onContentChange={(updates) => setContent(prev => ({ ...prev, ...updates }))}
+                    onOpenDesignHub={(tab) => {
+                      setDesignHubTab(tab || 'banners');
+                      setDesignHubOpen(true);
+                    }}
                   />
                 )}
 
@@ -2479,6 +2511,58 @@ function EditorContent() {
             title="Elegir imagen del bloque"
             onClose={() => setAssetPickerTarget(null)}
             onSelect={asset => handleAssetSelected(asset.url)}
+          />
+        )}
+
+        {/* Hub de Diseño Visual (Paletas & Adsets) */}
+        {designHubOpen && (
+          <VisualDesignHub
+            isOpen={designHubOpen}
+            onClose={() => setDesignHubOpen(false)}
+            brand={selectedBrand || null}
+            content={content}
+            brandId={selectedBrandId}
+            onUpdateColors={async ({ brandColors, contentColors }) => {
+              if (brandColors && selectedBrand) {
+                const updatedBrand = {
+                  ...selectedBrand,
+                  colors: {
+                    ...selectedBrand.colors,
+                    ...brandColors
+                  }
+                };
+                setBrands(prev => prev.map(b => b.id === selectedBrandId ? updatedBrand : b));
+                await updateBrand(selectedBrandId, updatedBrand);
+              }
+
+              if (contentColors) {
+                const updatedContent = {
+                  ...content,
+                  emailBgColor: contentColors.emailBgColor,
+                  bodyBgColor: contentColors.bodyBgColor,
+                };
+                setContent(updatedContent);
+                saveHistory(updatedContent);
+              }
+              showToast('🎨 Paleta de colores aplicada');
+            }}
+            onInjectAdset={(imageUrl) => {
+              // Inyectar banner como bloque Hero
+              const blocks = content.blocks || [];
+              const newBlock = {
+                id: 'blk_' + Math.random().toString(36).substring(2, 9),
+                type: 'hero' as const,
+                imageUrl: imageUrl,
+                alt: 'Adset Promocional'
+              };
+              const updatedContent = {
+                ...content,
+                blocks: [...blocks, newBlock]
+              };
+              setContent(updatedContent);
+              saveHistory(updatedContent);
+              showToast('🖼️ Banner adset insertado en el correo');
+            }}
           />
         )}
 

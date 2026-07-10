@@ -1,110 +1,122 @@
 import { Brand, DEFAULT_BRAND } from '@/lib/types';
-import { supabase } from './supabase';
+import { isSupabaseConfigured } from './env';
+import { readJson, withFileLock, writeJson } from './storage';
+import { createServerSupabase } from '@/lib/supabase/server';
+
+const LOCAL_FILE = 'brands.json';
+
+interface BrandRow {
+  id: string;
+  name: string;
+  category: string;
+  colors: Brand['colors'];
+  fonts: Brand['fonts'];
+  logo: Brand['logo'];
+  footer: Brand['footer'];
+  voice: Brand['voice'] | null;
+  is_favorite: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by?: string | null;
+}
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 11);
 }
 
-// Convert snake_case from DB to camelCase for Brand object
-function mapBrandFromDB(dbBrand: any): Brand {
+function mapBrandFromDB(row: BrandRow): Brand {
   return {
-    id: dbBrand.id,
-    name: dbBrand.name,
-    category: dbBrand.category,
-    colors: dbBrand.colors,
-    fonts: dbBrand.fonts,
-    logo: dbBrand.logo,
-    footer: dbBrand.footer,
-    voice: dbBrand.voice,
-    isFavorite: dbBrand.is_favorite,
-    createdAt: dbBrand.created_at,
-    updatedAt: dbBrand.updated_at,
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    colors: row.colors,
+    fonts: row.fonts,
+    logo: row.logo,
+    footer: row.footer,
+    voice: row.voice || undefined,
+    isFavorite: row.is_favorite,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
+function toRow(brand: Brand): BrandRow {
+  return {
+    id: brand.id,
+    name: brand.name,
+    category: brand.category,
+    colors: brand.colors,
+    fonts: brand.fonts,
+    logo: brand.logo,
+    footer: brand.footer,
+    voice: brand.voice || null,
+    is_favorite: brand.isFavorite,
+    created_at: brand.createdAt,
+    updated_at: brand.updatedAt,
+  };
+}
+
+async function localBrands(): Promise<Brand[]> {
+  return readJson<Brand[]>(LOCAL_FILE, []);
+}
+
 export async function getAllBrands(): Promise<Brand[]> {
+  if (!isSupabaseConfigured()) return localBrands();
+  const supabase = await createServerSupabase();
   const { data, error } = await supabase.from('brands').select('*').order('name');
-  if (error) {
-    console.error('Error getting all brands:', error);
-    return [];
-  }
-  return (data || []).map(mapBrandFromDB);
+  if (error) throw new Error(`No se pudieron leer las marcas: ${error.message}`);
+  return ((data || []) as BrandRow[]).map(mapBrandFromDB);
 }
 
 export async function getBrandById(id: string): Promise<Brand | undefined> {
-  const { data, error } = await supabase.from('brands').select('*').eq('id', id).single();
+  if (!isSupabaseConfigured()) return (await localBrands()).find(brand => brand.id === id);
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase.from('brands').select('*').eq('id', id).maybeSingle();
   if (error || !data) return undefined;
-  return mapBrandFromDB(data);
+  return mapBrandFromDB(data as BrandRow);
 }
 
 export async function searchBrands(query: string, category?: string): Promise<Brand[]> {
-  let qb = supabase.from('brands').select('*');
-  
-  if (category && category !== 'Todas') {
-    qb = qb.eq('category', category);
-  }
-
-  const { data, error } = await qb;
-  if (error) {
-    console.error('Error searching brands:', error);
-    return [];
-  }
-
-  let brands = (data || []).map(mapBrandFromDB);
-
+  let brands = await getAllBrands();
+  if (category && category !== 'Todas') brands = brands.filter(brand => brand.category === category);
   if (query) {
-    const q = query.toLowerCase();
-    brands = brands.filter(b =>
-      b.name.toLowerCase().includes(q) ||
-      b.category.toLowerCase().includes(q)
-    );
+    const normalized = query.toLocaleLowerCase('es');
+    brands = brands.filter(brand => `${brand.name} ${brand.category}`.toLocaleLowerCase('es').includes(normalized));
   }
-
-  // Sort: favorites first, then alphabetically
-  brands.sort((a, b) => {
-    if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
-
-  return brands;
+  return brands.sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite) || a.name.localeCompare(b.name, 'es'));
 }
 
-export async function createBrand(data: Partial<Brand>): Promise<Brand> {
+export async function createBrand(data: Partial<Brand>, createdBy?: string): Promise<Brand> {
   const now = new Date().toISOString();
-  const newBrand: Brand = {
-    ...DEFAULT_BRAND,
-    ...data,
-    id: data.id || generateId(),
-    createdAt: now,
-    updatedAt: now,
-  } as Brand;
+  const brand = { ...DEFAULT_BRAND, ...data, id: data.id || generateId(), createdAt: now, updatedAt: now } as Brand;
 
-  const { error } = await supabase.from('brands').insert({
-    id: newBrand.id,
-    name: newBrand.name,
-    category: newBrand.category,
-    colors: newBrand.colors,
-    fonts: newBrand.fonts,
-    logo: newBrand.logo,
-    footer: newBrand.footer,
-    voice: newBrand.voice || null,
-    is_favorite: newBrand.isFavorite,
-    created_at: newBrand.createdAt,
-    updated_at: newBrand.updatedAt,
-  });
-
-  if (error) {
-    console.error('Error creating brand:', error);
-    throw new Error(error.message);
+  if (!isSupabaseConfigured()) {
+    return withFileLock(LOCAL_FILE, async () => {
+      const brands = await localBrands();
+      brands.push(brand);
+      await writeJson(LOCAL_FILE, brands);
+      return brand;
+    });
   }
-
-  return newBrand;
+  const supabase = await createServerSupabase();
+  const { error } = await supabase.from('brands').insert({ ...toRow(brand), created_by: createdBy || null });
+  if (error) throw new Error(error.message);
+  return brand;
 }
 
 export async function updateBrand(id: string, data: Partial<Brand>): Promise<Brand | null> {
-  const now = new Date().toISOString();
-  
-  const updates: any = { updated_at: now };
+  if (!isSupabaseConfigured()) {
+    return withFileLock(LOCAL_FILE, async () => {
+      const brands = await localBrands();
+      const index = brands.findIndex(brand => brand.id === id);
+      if (index < 0) return null;
+      brands[index] = { ...brands[index], ...data, id, updatedAt: new Date().toISOString() };
+      await writeJson(LOCAL_FILE, brands);
+      return brands[index];
+    });
+  }
+
+  const updates: Partial<BrandRow> = { updated_at: new Date().toISOString() };
   if (data.name !== undefined) updates.name = data.name;
   if (data.category !== undefined) updates.category = data.category;
   if (data.colors !== undefined) updates.colors = data.colors;
@@ -114,136 +126,41 @@ export async function updateBrand(id: string, data: Partial<Brand>): Promise<Bra
   if (data.voice !== undefined) updates.voice = data.voice;
   if (data.isFavorite !== undefined) updates.is_favorite = data.isFavorite;
 
-  const { data: updatedData, error } = await supabase
-    .from('brands')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error || !updatedData) {
-    console.error('Error updating brand:', error);
-    return null;
-  }
-
-  return mapBrandFromDB(updatedData);
+  const supabase = await createServerSupabase();
+  const { data: updated, error } = await supabase.from('brands').update(updates).eq('id', id).select().maybeSingle();
+  if (error || !updated) return null;
+  return mapBrandFromDB(updated as BrandRow);
 }
 
 export async function deleteBrand(id: string): Promise<boolean> {
-  const { error } = await supabase.from('brands').delete().eq('id', id);
-  if (error) {
-    console.error('Error deleting brand:', error);
-    return false;
+  if (!isSupabaseConfigured()) {
+    return withFileLock(LOCAL_FILE, async () => {
+      const brands = await localBrands();
+      const filtered = brands.filter(brand => brand.id !== id);
+      if (filtered.length === brands.length) return false;
+      await writeJson(LOCAL_FILE, filtered);
+      return true;
+    });
   }
-  return true;
+  const supabase = await createServerSupabase();
+  const { error } = await supabase.from('brands').delete().eq('id', id);
+  return !error;
 }
 
-export async function importBrands(imported: Partial<Brand>[]): Promise<number> {
-  const existing = await getAllBrands();
-  const existingNames = new Set(existing.map(b => b.name.toLowerCase()));
-  
-  const toInsert = [];
-  const now = new Date().toISOString();
-
-  for (const brand of imported) {
-    if (!brand.name) continue;
-    if (existingNames.has(brand.name.toLowerCase())) continue;
-
-    const b = {
-      ...DEFAULT_BRAND,
-      ...brand,
-      id: brand.id || generateId(),
-      createdAt: now,
-      updatedAt: now,
-    } as Brand;
-    
-    toInsert.push({
-      id: b.id,
-      name: b.name,
-      category: b.category,
-      colors: b.colors,
-      fonts: b.fonts,
-      logo: b.logo,
-      footer: b.footer,
-      voice: b.voice || null,
-      is_favorite: b.isFavorite,
-      created_at: b.createdAt,
-      updated_at: b.updatedAt,
-    });
-    existingNames.add(b.name.toLowerCase());
+export async function importBrands(imported: Partial<Brand>[], createdBy?: string): Promise<number> {
+  const existingNames = new Set((await getAllBrands()).map(brand => brand.name.toLocaleLowerCase('es')));
+  let count = 0;
+  for (const item of imported) {
+    if (!item.name || existingNames.has(item.name.toLocaleLowerCase('es'))) continue;
+    await createBrand(item, createdBy);
+    existingNames.add(item.name.toLocaleLowerCase('es'));
+    count += 1;
   }
-
-  if (toInsert.length === 0) return 0;
-
-  const { error } = await supabase.from('brands').insert(toInsert);
-  if (error) {
-    console.error('Error importing brands:', error);
-    return 0;
-  }
-
-  return toInsert.length;
+  return count;
 }
 
 export async function seedIfEmpty(): Promise<void> {
-  const { count, error } = await supabase.from('brands').select('*', { count: 'exact', head: true });
-  if (error || count === null || count > 0) return;
-
-  const samples: Partial<Brand>[] = [
-    {
-      name: 'AMO Managements',
-      category: 'Crédito',
-      colors: { primary: '#0B2A4A', accent: '#29ABE2', gradientStart: '#29ABE2', gradientEnd: '#1B6FC4' },
-      fonts: { heading: 'Montserrat', body: 'Verdana' },
-      logo: { type: 'text', value: 'AMO|MANAGEMENTS' },
-      footer: {
-        tagline: 'Mandy, la Chica del Crédito',
-        subtitle: 'Restauración de crédito',
-        disclaimer: 'Este correo no forma parte del sitio web de Facebook ni de Meta Platforms, Inc., ni está avalado por Meta. Los resultados pueden variar según cada caso. AMO Managements no garantiza la eliminación de información precisa y verificable de tu reporte de crédito.',
-      },
-      isFavorite: true,
-    },
-    {
-      name: 'Luxe Properties',
-      category: 'Real Estate',
-      colors: { primary: '#1a1a2e', accent: '#c9a84c', gradientStart: '#c9a84c', gradientEnd: '#d4af37' },
-      fonts: { heading: 'Montserrat', body: 'Verdana' },
-      logo: { type: 'text', value: 'LUXE|PROPERTIES' },
-      footer: {
-        tagline: 'Tu hogar soñado te espera',
-        subtitle: 'Bienes Raíces de Lujo',
-        disclaimer: 'Las imágenes son ilustrativas. Los precios pueden variar sin previo aviso.',
-      },
-      isFavorite: false,
-    },
-    {
-      name: 'VitaFit Studio',
-      category: 'Fitness',
-      colors: { primary: '#0d1117', accent: '#22c55e', gradientStart: '#22c55e', gradientEnd: '#16a34a' },
-      fonts: { heading: 'Montserrat', body: 'Verdana' },
-      logo: { type: 'text', value: 'VITA|FIT' },
-      footer: {
-        tagline: 'Transforma tu cuerpo, transforma tu vida',
-        subtitle: 'Fitness & Wellness',
-        disclaimer: 'Consulta a tu médico antes de comenzar cualquier programa de ejercicios.',
-      },
-      isFavorite: false,
-    },
-    {
-      name: 'NovaTech Solutions',
-      category: 'Tecnología',
-      colors: { primary: '#0f172a', accent: '#8b5cf6', gradientStart: '#8b5cf6', gradientEnd: '#6d28d9' },
-      fonts: { heading: 'Montserrat', body: 'Verdana' },
-      logo: { type: 'text', value: 'NOVA|TECH' },
-      footer: {
-        tagline: 'Innovación sin límites',
-        subtitle: 'Soluciones Tecnológicas',
-        disclaimer: 'Las especificaciones del producto pueden cambiar sin previo aviso.',
-      },
-      isFavorite: true,
-    },
-  ];
-
-  for (const s of samples) {
-    await createBrand(s);
-  }
+  if ((await getAllBrands()).length > 0) return;
+  const seeds = await readJson<Brand[]>(LOCAL_FILE, []);
+  for (const seed of seeds) await createBrand(seed);
 }

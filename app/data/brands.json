@@ -14,14 +14,17 @@
     },
     "logo": {
       "type": "image",
-      "value": "/api/assets/admediasolution/logo.png",
+      "value": "/email-assets/ad-media/logos/wordmark-white.png",
       "showName": false,
-      "imageWidth": 180
+      "imageWidth": 220
     },
     "footer": {
       "tagline": "AD Media Solution — Growth Marketing & Automation",
       "subtitle": "Agencia de Growth Marketing",
-      "disclaimer": "Este correo electrónico y cualquier archivo adjunto son confidenciales y para uso exclusivo del destinatario. Si lo has recibido por error, por favor notifícalo al remitente."
+      "disclaimer": "Este correo electrónico y cualquier archivo adjunto son confidenciales y para uso exclusivo del destinatario. Si lo has recibido por error, por favor notifícalo al remitente.",
+      "address": "{{location.full_address}}",
+      "unsubscribeLabel": "Cancelar suscripción",
+      "unsubscribeUrl": "{{unsubscribe}}"
     },
     "isFavorite": true,
     "id": "admediasolution",
@@ -42,13 +45,18 @@
       "body": "Verdana"
     },
     "logo": {
-      "type": "text",
-      "value": "AMO|MANAGEMENTS"
+      "type": "image",
+      "value": "/email-assets/amo/logos/lockup-white.png",
+      "imageWidth": 260,
+      "showName": false
     },
     "footer": {
       "tagline": "Mandy, la Chica del Crédito",
       "subtitle": "Restauración de crédito",
-      "disclaimer": "Este correo no forma parte del sitio web de Facebook ni de Meta Platforms, Inc., ni está avalado por Meta. Los resultados pueden variar según cada caso. AMO Managements no garantiza la eliminación de información precisa y verificable de tu reporte de crédito."
+      "disclaimer": "Este correo no forma parte del sitio web de Facebook ni de Meta Platforms, Inc., ni está avalado por Meta. Los resultados pueden variar según cada caso. AMO Managements no garantiza la eliminación de información precisa y verificable de tu reporte de crédito.",
+      "address": "{{location.full_address}}",
+      "unsubscribeLabel": "Cancelar suscripción",
+      "unsubscribeUrl": "{{unsubscribe}}"
     },
     "isFavorite": true,
     "id": "mr761k2r7u67zwi2n",

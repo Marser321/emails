@@ -38,22 +38,18 @@ export class MissingApiKeyError extends Error {
   constructor(engine: AIEngine) {
     super(
       engine === 'claude'
-        ? 'API Key de Anthropic no configurada. Agrégala en "Configurar IA" o define ANTHROPIC_API_KEY en el servidor.'
-        : 'API Key de Gemini no configurada. Agrégala en "Configurar IA" o define GEMINI_API_KEY en el servidor.'
+        ? 'Anthropic no está configurado en el servidor.'
+        : 'Gemini no está configurado en el servidor.'
     );
     this.name = 'MissingApiKeyError';
   }
 }
 
-export async function getProvider(requested?: AIEngine, legacyGeminiKey?: string): Promise<AIProvider> {
+export async function getProvider(requested?: AIEngine): Promise<AIProvider> {
   const settings = await getSettings();
   const engine: AIEngine = requested ?? settings.defaultEngine ?? 'gemini';
 
-  let apiKey = await resolveApiKey(engine);
-  // Fallback legacy: el cliente viejo mandaba la key de Gemini en el body
-  if (!apiKey && engine === 'gemini' && legacyGeminiKey) {
-    apiKey = legacyGeminiKey;
-  }
+  const apiKey = await resolveApiKey(engine);
   if (!apiKey) {
     throw new MissingApiKeyError(engine);
   }

@@ -1,8 +1,8 @@
-// Exportación pragmática: las imágenes locales (/api/assets/...) no existen fuera
+// Exportación pragmática: las imágenes locales no existen fuera
 // de esta máquina. Tres modos: rewrite a URL pública, ZIP con imágenes, o base64.
 import JSZip from 'jszip';
 
-const LOCAL_ASSET_REGEX = /(?:src|background)=["'](\/api\/assets\/[^"']+)["']/g;
+const LOCAL_ASSET_REGEX = /(?:src|background)=["']((?:\/api\/assets\/|\/email-assets\/)[^"']+)["']/g;
 
 // URLs locales únicas presentes en el HTML
 export function collectLocalAssetUrls(html: string): string[] {
@@ -15,14 +15,16 @@ export function collectLocalAssetUrls(html: string): string[] {
 
 // Nombre de archivo plano y único para el ZIP / rewrite: <brandId>-<filename>
 function flatName(localUrl: string): string {
-  const parts = localUrl.replace('/api/assets/', '').split('/');
+  const parts = localUrl.replace(/^\/(?:api\/assets|email-assets)\//, '').split('/');
   return decodeURIComponent(parts.join('-'));
 }
 
 // Reemplaza /api/assets/<brand>/<file> por <baseUrl>/<brand>/<file>
 export function rewriteAssetUrls(html: string, publicBaseUrl: string): string {
   const base = publicBaseUrl.replace(/\/+$/, '');
-  return html.replace(/(\/api\/assets\/)([^"']+)/g, (_m, _prefix, rest) => `${base}/${rest}`);
+  return html
+    .replace(/(\/api\/assets\/)([^"']+)/g, (_match, _prefix, rest) => `${base}/${rest}`)
+    .replace(/(\/email-assets\/)([^"']+)/g, (_match, _prefix, rest) => `${base}/email-assets/${rest}`);
 }
 
 // ZIP con email.html (rutas relativas images/<file>) + las imágenes

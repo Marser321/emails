@@ -1,83 +1,59 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
+import { ZodError } from 'zod';
+import { documentToContent } from '@/lib/email-document';
+import { renderEmail } from '@/lib/templates';
+import { sendTestRequestSchema, validationMessage } from '@/lib/server/api-schemas';
+import { requireUser, AuthenticationError } from '@/lib/server/auth';
+import { getBrandById } from '@/lib/server/brandStore';
+import type { EmailDocumentV3 } from '@/lib/types';
+
+function plainText(document: EmailDocumentV3): string {
+  return document.blocks.flatMap(block => {
+    if (block.type === 'text') return [block.headline, block.body];
+    if (block.type === 'bullets') return [block.bulletsTitle, ...block.bullets];
+    if (block.type === 'cta') return [block.preCta, block.ctaText];
+    if (block.type === 'quote') return [block.text, block.author];
+    return [];
+  }).filter(Boolean).join('\n\n');
+}
 
 export async function POST(req: Request) {
   try {
-    const { toEmail, subject, html } = await req.json();
+    await requireUser();
+    const input = sendTestRequestSchema.parse(await req.json());
+    const brand = await getBrandById(input.document.brandId);
+    if (!brand) return NextResponse.json({ error: 'Marca no encontrada' }, { status: 400 });
+    const html = renderEmail(brand, documentToContent(input.document));
+    if (html.length > 350_000) return NextResponse.json({ error: 'El email supera el tamaño permitido' }, { status: 400 });
 
-    if (!toEmail || !html) {
-      return NextResponse.json(
-        { error: 'Email destinatario y contenido HTML requeridos.' },
-        { status: 400 }
-      );
-    }
-
-    // Check if custom SMTP exists in environment
-    const smtpHost = process.env.SMTP_HOST;
-    const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
-
-    if (smtpHost && smtpUser && smtpPass) {
-      // Send via real SMTP server
-      const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: smtpPort,
-        secure: smtpPort === 465,
-        auth: {
-          user: smtpUser,
-          pass: smtpPass,
-        },
-      });
-
-      await transporter.sendMail({
-        from: `"${process.env.SMTP_FROM_NAME || 'AD Media Solution'}" <${process.env.SMTP_FROM_EMAIL || smtpUser}>`,
-        to: toEmail,
-        subject: subject || 'Prueba de Email',
-        html: html,
-      });
-
-      return NextResponse.json({
-        success: true,
-        isVirtual: false,
-        message: `Correo de prueba enviado de forma real a ${toEmail}.`,
-      });
+    const host = process.env.SMTP_HOST;
+    const port = Number(process.env.SMTP_PORT || 587);
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    let transporter: nodemailer.Transporter;
+    let isVirtual = false;
+    if (host && user && pass) {
+      transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+    } else if (process.env.NODE_ENV !== 'production' && process.env.EMAILBUILDER_ENABLE_ETHEREAL === 'true') {
+      const account = await nodemailer.createTestAccount();
+      transporter = nodemailer.createTransport({ host: 'smtp.ethereal.email', port: 587, secure: false, auth: { user: account.user, pass: account.pass } });
+      isVirtual = true;
     } else {
-      // Fallback: Create test account on Ethereal Mail dynamically
-      console.log('No custom SMTP config found. Creating virtual Ethereal Mail account...');
-      const testAccount = await nodemailer.createTestAccount();
-
-      const transporter = nodemailer.createTransport({
-        host: 'smtp.ethereal.email',
-        port: 587,
-        secure: false,
-        auth: {
-          user: testAccount.user,
-          pass: testAccount.pass,
-        },
-      });
-
-      const info = await transporter.sendMail({
-        from: '"AD Media Solution Email Builder" <test@admediasolution.com>',
-        to: toEmail,
-        subject: subject || 'Prueba de Email (Virtual)',
-        html: html,
-      });
-
-      const previewUrl = nodemailer.getTestMessageUrl(info);
-
-      return NextResponse.json({
-        success: true,
-        isVirtual: true,
-        previewUrl: previewUrl,
-        message: `Bandeja virtual creada. Puedes ver cómo renderiza en el cliente de correo real.`,
-      });
+      return NextResponse.json({ error: 'SMTP no está configurado en el servidor' }, { status: 503 });
     }
+
+    const info = await transporter.sendMail({
+      from: `"${process.env.SMTP_FROM_NAME || 'AD Media Solution'}" <${process.env.SMTP_FROM_EMAIL || user}>`,
+      to: input.toEmail,
+      subject: input.document.subject,
+      html,
+      text: plainText(input.document),
+    });
+    return NextResponse.json({ success: true, isVirtual, previewUrl: isVirtual ? nodemailer.getTestMessageUrl(info) : undefined });
   } catch (error) {
-    console.error('Error in send-test API:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Error al enviar el correo de prueba.' },
-      { status: 500 }
-    );
+    if (error instanceof AuthenticationError) return NextResponse.json({ error: error.message }, { status: 401 });
+    if (error instanceof ZodError) return NextResponse.json({ error: validationMessage(error) }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Error al enviar la prueba' }, { status: 500 });
   }
 }

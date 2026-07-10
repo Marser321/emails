@@ -1,5 +1,7 @@
 // Template Engine — Generates email-client-compatible HTML
 import { BlockConfig, Brand, EmailContent, GalleryBlock, HeroBlock, ImageTextBlock, LayoutVariant, QuoteBlock } from './types';
+import { legacyContentToBlocks } from './email-document';
+import { sanitizeBrandForEmail, sanitizeContentForEmail } from './email-safety';
 
 export interface RenderOptions {
   // Base pública para reescribir /api/assets/ al exportar (se aplica client-side en export.ts)
@@ -130,7 +132,7 @@ function renderBullets(bullets: string[], accentColor: string): string {
       if (!b.trim()) return '';
       return `
   <p data-editor-field="bullet-${i}" class="bullet-text" style="margin:0 0 6px;font-family:Verdana,Geneva,sans-serif;font-size:16px;line-height:1.5;color:#4a5568;">
-    <span style="color:${accentColor};font-weight:700;">✓</span> ${b}
+    <span style="color:${accentColor};font-weight:700;">&#8226;</span> ${b}
   </p>`;
     })
     .filter(Boolean)
@@ -150,7 +152,7 @@ function renderInfoBox(content: EmailContent, brand: Brand): string {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${infoBoxBg};border:2px solid ${brand.colors.accent}33;border-radius:12px;margin:0 0 28px;">
   <tr>
   <td class="info-box-cell" style="padding:20px 24px;text-align:center;">
-    ${content.eventDate ? `<p data-editor-field="eventDate" style="margin:0 0 4px;font-family:Verdana,Geneva,sans-serif;font-size:16px;color:${brand.colors.primary};font-weight:800;">📅 ${content.eventDate}</p>` : ''}
+    ${content.eventDate ? `<p data-editor-field="eventDate" style="margin:0 0 4px;font-family:Verdana,Geneva,sans-serif;font-size:16px;color:${brand.colors.primary};font-weight:800;">${content.eventDate}</p>` : ''}
     ${content.eventTime ? `<p data-editor-field="eventTime" style="margin:0;font-family:Verdana,Geneva,sans-serif;font-size:16px;color:${brand.colors.accent};font-weight:700;">${content.eventTime}</p>` : ''}
   </td>
   </tr>
@@ -307,7 +309,7 @@ function renderCTA(text: string, url: string, bgColor: string, fieldName: 'ctaTe
  * Render a single modular canvas block into email-compatible HTML.
  * Each block gets a data-editor-field attribute for interactive click-to-edit.
  */
-function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number, emailWidth: number): string {
+function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number): string {
   const accent = brand.colors.accent;
   const primary = brand.colors.primary;
   const headingFont = brand.fonts.heading || 'Montserrat';
@@ -409,7 +411,7 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number, emai
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${infoBoxBg};border:2px solid ${accent}33;border-radius:12px;">
   <tr>
   <td class="info-box-cell" style="padding:20px 24px;text-align:center;">
-    ${block.eventDate ? `<p style="margin:0 0 4px;font-family:${bodyFont},Geneva,sans-serif;font-size:16px;color:${primary};font-weight:800;">📅 ${block.eventDate}</p>` : ''}
+    ${block.eventDate ? `<p style="margin:0 0 4px;font-family:${bodyFont},Geneva,sans-serif;font-size:16px;color:${primary};font-weight:800;">${block.eventDate}</p>` : ''}
     ${block.eventTime ? `<p style="margin:0;font-family:${bodyFont},Geneva,sans-serif;font-size:16px;color:${accent};font-weight:700;">${block.eventTime}</p>` : ''}
   </td>
   </tr>
@@ -481,6 +483,8 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number, emai
     ${brand.footer.subtitle ? `<span style="color:#8ba0b8;"> · ${brand.footer.subtitle}</span>` : ''}
   </p>
   ${block.footerNote ? `<p class="footer-note-text" style="margin:8px 0 0;font-family:${bodyFont},Geneva,sans-serif;font-size:14px;text-align:center;color:#9aa6b2;">${block.footerNote}</p>` : ''}
+  ${brand.footer.address ? `<p style="margin:12px 0 0;font-family:${bodyFont},Geneva,sans-serif;font-size:11px;line-height:1.5;color:#8ba0b8;">${brand.footer.address}</p>` : ''}
+  ${brand.footer.unsubscribeUrl ? `<p style="margin:8px 0 0;font-family:${bodyFont},Geneva,sans-serif;font-size:11px;"><a href="${brand.footer.unsubscribeUrl}" style="color:#b9c7d6;text-decoration:underline;">${brand.footer.unsubscribeLabel || 'Cancelar suscripción'}</a></p>` : ''}
 </td>
 </tr>
 ${brand.footer.disclaimer ? `
@@ -506,7 +510,7 @@ function renderCanvasEmail(brand: Brand, content: EmailContent): string {
   const pageBackground = content.emailBgColor || '#eef2f6';
   const bodyBackground = content.bodyBgColor || '#ffffff';
 
-  const blocksHtml = (content.blocks || []).map((b, i) => renderCanvasBlock(b, brand, i, emailWidth)).join('\n');
+  const blocksHtml = (content.blocks || []).map((b, i) => renderCanvasBlock(b, brand, i)).join('\n');
 
   return `<!DOCTYPE html>
 <html lang="es" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -516,7 +520,7 @@ function renderCanvasEmail(brand: Brand, content: EmailContent): string {
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="x-apple-disable-message-reformatting">
 <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
-<title>${content.headline || 'Email'}</title>
+<title>${content.subject || content.headline || 'Email'}</title>
 <link href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(headingFont).replace(/%20/g, '+')}:wght@400;700;800&family=${encodeURIComponent(bodyFont).replace(/%20/g, '+')}:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <!--[if mso]>
 <noscript>
@@ -554,6 +558,7 @@ function renderCanvasEmail(brand: Brand, content: EmailContent): string {
 </style>
 </head>
 <body style="margin:0;padding:0;background:${pageBackground};font-family:'${headingFont}','Open Sans',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+${content.preheader ? `<div style="display:none;font-size:1px;color:${pageBackground};line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${content.preheader}&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>` : ''}
 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${pageBackground};" class="email-bg" bgcolor="${pageBackground}">
 <tr><td align="center" style="padding:24px 16px;">
@@ -606,8 +611,15 @@ function layoutTokens(layout: LayoutVariant): LayoutTokens {
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function renderEmail(brand: Brand, content: EmailContent, _options: RenderOptions = {}): string {
-  // V2 canvas mode: when blocks array is present, use modular renderer
-  if (content.blocks && content.blocks.length > 0) {
+  brand = sanitizeBrandForEmail(brand);
+  content = sanitizeContentForEmail(content);
+
+  // All content now passes through the modular renderer. Legacy documents are
+  // normalized into deterministic blocks so existing drafts/share links survive.
+  if (!content.blocks?.length) {
+    content = { ...content, blocks: legacyContentToBlocks(content) };
+  }
+  if (content.blocks?.length) {
     return renderCanvasEmail(brand, content);
   }
 

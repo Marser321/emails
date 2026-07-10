@@ -1,5 +1,7 @@
 'use client';
 
+import { Mail } from 'lucide-react';
+
 // Miniatura fiel del email: iframe con el HTML real escalado — sin dependencias
 interface EmailThumbnailProps {
   html: string;
@@ -19,7 +21,7 @@ export default function EmailThumbnail({ html, width = 120, height = 150 }: Emai
         }}
         aria-hidden="true"
       >
-        ✉️
+        <Mail size={24} />
       </div>
     );
   }

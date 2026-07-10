@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { Building2, Clipboard, Copy, FilePenLine, ThumbsDown, ThumbsUp } from 'lucide-react';
 import EmailThumbnail from '@/components/EmailThumbnail';
 import { EmailHistoryEntry } from '@/lib/types';
 
@@ -33,7 +34,7 @@ export default function EmailHistoryCard({ entry, brandName, onRated, onToast }:
     }
     try {
       await navigator.clipboard.writeText(entry.htmlSnapshot);
-      onToast('📋 HTML copiado al portapapeles');
+      onToast('HTML copiado al portapapeles');
     } catch {
       onToast('Error al copiar', 'error');
     }
@@ -63,7 +64,7 @@ export default function EmailHistoryCard({ entry, brandName, onRated, onToast }:
             {entry.subject || '(sin asunto)'}
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            🏢 {brandName} · {relativeDate(entry.createdAt)}
+            <Building2 size={11} style={{ display: 'inline', verticalAlign: 'text-bottom' }} /> {brandName} · {relativeDate(entry.createdAt)}
           </div>
           <div style={{ display: 'flex', gap: 3, marginTop: 'auto' }}>
             <button
@@ -77,7 +78,7 @@ export default function EmailHistoryCard({ entry, brandName, onRated, onToast }:
                 borderColor: entry.rating === 'up' ? 'rgba(52, 211, 153, 0.4)' : undefined,
               }}
             >
-              👍
+              <ThumbsUp size={13} fill={entry.rating === 'up' ? 'currentColor' : 'none'} />
             </button>
             <button
               type="button"
@@ -90,12 +91,12 @@ export default function EmailHistoryCard({ entry, brandName, onRated, onToast }:
                 borderColor: entry.rating === 'down' ? 'rgba(248, 113, 113, 0.4)' : undefined,
               }}
             >
-              👎
+              <ThumbsDown size={13} fill={entry.rating === 'down' ? 'currentColor' : 'none'} />
             </button>
           </div>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-secondary btn-sm" onClick={handleCopy} title="Copiar HTML" style={{ padding: '2px 7px', fontSize: 10, height: 24 }}>
-              📋 Copiar
+              <Clipboard size={12} /> Copiar
             </button>
             <button
               type="button"
@@ -104,7 +105,7 @@ export default function EmailHistoryCard({ entry, brandName, onRated, onToast }:
               title="Reabrir en el editor"
               style={{ padding: '2px 7px', fontSize: 10, height: 24 }}
             >
-              ✏️ Abrir
+              <FilePenLine size={12} /> Abrir
             </button>
             <button
               type="button"
@@ -113,7 +114,7 @@ export default function EmailHistoryCard({ entry, brandName, onRated, onToast }:
               title="Duplicar como email nuevo"
               style={{ padding: '2px 7px', fontSize: 10, height: 24 }}
             >
-              📄 Duplicar
+              <Copy size={12} /> Duplicar
             </button>
           </div>
         </div>
