@@ -56,7 +56,7 @@ export interface Brand {
   updatedAt: string;
 }
 
-// ===== Bloques opcionales del email (slots de orden fijo) =====
+// ===== Bloques opcionales del email (slots de orden fijo — legacy) =====
 
 export type LayoutVariant = 'classic' | 'minimal' | 'hero' | 'card';
 
@@ -87,6 +87,141 @@ export interface QuoteBlock {
   role?: string;
 }
 
+// ===== Bloques modulares del Canvas =====
+
+export type CanvasBlockType =
+  | 'header'
+  | 'hero'
+  | 'text'
+  | 'image-text'
+  | 'gallery'
+  | 'bullets'
+  | 'infobox'
+  | 'quote'
+  | 'cta'
+  | 'divider'
+  | 'spacer'
+  | 'footer';
+
+interface BlockBase {
+  id: string;
+  type: CanvasBlockType;
+}
+
+export interface HeaderBlockConfig extends BlockBase {
+  type: 'header';
+  // logo & brand name are derived from the Brand; no extra data needed
+}
+
+export interface HeroBlockConfig extends BlockBase {
+  type: 'hero';
+  imageUrl: string;
+  alt?: string;
+  href?: string;
+  fullBleed?: boolean;
+}
+
+export interface TextBlockConfig extends BlockBase {
+  type: 'text';
+  label?: string;
+  headline?: string;
+  body?: string;
+}
+
+export interface ImageTextBlockConfig extends BlockBase {
+  type: 'image-text';
+  imageUrl: string;
+  alt?: string;
+  title?: string;
+  text: string;
+  imagePosition: 'left' | 'right';
+}
+
+export interface GalleryBlockConfig extends BlockBase {
+  type: 'gallery';
+  images: { url: string; alt?: string; href?: string }[];
+  columns: 2 | 3;
+  caption?: string;
+}
+
+export interface BulletsBlockConfig extends BlockBase {
+  type: 'bullets';
+  bulletsTitle?: string;
+  bullets: string[];
+}
+
+export interface InfoboxBlockConfig extends BlockBase {
+  type: 'infobox';
+  eventDate?: string;
+  eventTime?: string;
+}
+
+export interface QuoteBlockConfig extends BlockBase {
+  type: 'quote';
+  text: string;
+  author?: string;
+  role?: string;
+}
+
+export interface CtaBlockConfig extends BlockBase {
+  type: 'cta';
+  ctaText: string;
+  ctaUrl: string;
+  preCta?: string;
+  secondaryCtaText?: string;
+  secondaryCtaUrl?: string;
+}
+
+export interface DividerBlockConfig extends BlockBase {
+  type: 'divider';
+}
+
+export interface SpacerBlockConfig extends BlockBase {
+  type: 'spacer';
+  height?: number; // px, default 20
+}
+
+export interface FooterBlockConfig extends BlockBase {
+  type: 'footer';
+  footerNote?: string;
+  // tagline/disclaimer are derived from Brand
+}
+
+export type BlockConfig =
+  | HeaderBlockConfig
+  | HeroBlockConfig
+  | TextBlockConfig
+  | ImageTextBlockConfig
+  | GalleryBlockConfig
+  | BulletsBlockConfig
+  | InfoboxBlockConfig
+  | QuoteBlockConfig
+  | CtaBlockConfig
+  | DividerBlockConfig
+  | SpacerBlockConfig
+  | FooterBlockConfig;
+
+// Metadata for the block palette UI
+export const CANVAS_BLOCK_CATALOG: { type: CanvasBlockType; icon: string; label: string }[] = [
+  { type: 'header',     icon: '🏷️', label: 'Header' },
+  { type: 'hero',       icon: '🖼️', label: 'Imagen Hero' },
+  { type: 'text',       icon: '📝', label: 'Texto' },
+  { type: 'image-text', icon: '📰', label: 'Imagen + Texto' },
+  { type: 'gallery',    icon: '🎞️', label: 'Galería' },
+  { type: 'bullets',    icon: '✅', label: 'Bullets' },
+  { type: 'infobox',    icon: '📅', label: 'Info Box' },
+  { type: 'quote',      icon: '💬', label: 'Testimonio' },
+  { type: 'cta',        icon: '🔘', label: 'Botón CTA' },
+  { type: 'divider',    icon: '➖', label: 'Separador' },
+  { type: 'spacer',     icon: '↕️', label: 'Espaciador' },
+  { type: 'footer',     icon: '📄', label: 'Footer' },
+];
+
+// Generate a short random ID for canvas blocks
+export function generateBlockId(): string {
+  return 'blk_' + Math.random().toString(36).substring(2, 9);
+}
+
 export interface EmailContent {
   label: string;
   headline: string;
@@ -112,6 +247,9 @@ export interface EmailContent {
   gallery?: GalleryBlock;
   quote?: QuoteBlock;
   showDividers?: boolean;
+  // ===== Canvas modular (v2) =====
+  emailWidth?: number;   // Max container width in px (default 600)
+  blocks?: BlockConfig[]; // When present, the canvas renderer is used
 }
 
 export type TemplateType = 
@@ -120,7 +258,10 @@ export type TemplateType =
   | 'followup'
   | 'promo'
   | 'reminder'
-  | 'newsletter';
+  | 'newsletter'
+  | 'sales'
+  | 'financial_advisory'
+  | 'onboarding';
 
 export interface TemplateConfig {
   type: TemplateType;
@@ -282,6 +423,45 @@ export const TEMPLATES: TemplateConfig[] = [
       ctaText: 'Leer más',
       preCta: 'Lee el artículo completo 📖',
       footerNote: 'Síguenos en redes sociales',
+    },
+  },
+  {
+    type: 'sales',
+    name: 'Venta Directa',
+    icon: '🛒',
+    description: 'Ofertas comerciales y lanzamientos de productos',
+    defaultContent: {
+      label: 'Nuevo Lanzamiento',
+      bulletsTitle: 'Beneficios principales:',
+      ctaText: 'Comprar Ahora',
+      preCta: 'Asegura tu producto antes de que se agote 🚀',
+      footerNote: 'Garantía de satisfacción de 30 días',
+    },
+  },
+  {
+    type: 'financial_advisory',
+    name: 'Asesoría Financiera',
+    icon: '📈',
+    description: 'Actualización de mercado, revisión de portafolio o citas',
+    defaultContent: {
+      label: 'Update Financiero',
+      bulletsTitle: 'Puntos clave a considerar:',
+      ctaText: 'Agendar Revisión',
+      preCta: 'Conversemos sobre tus objetivos financieros 💼',
+      footerNote: 'La información proporcionada no constituye asesoramiento fiscal',
+    },
+  },
+  {
+    type: 'onboarding',
+    name: 'Bienvenida',
+    icon: '👋',
+    description: 'Onboarding para nuevos clientes o usuarios',
+    defaultContent: {
+      label: '¡Te damos la bienvenida!',
+      bulletsTitle: 'Pasos para comenzar:',
+      ctaText: 'Completar mi perfil',
+      preCta: 'Estamos felices de tenerte con nosotros 🎉',
+      footerNote: 'El equipo de soporte está aquí para ayudarte',
     },
   },
 ];

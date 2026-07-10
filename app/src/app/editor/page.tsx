@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import AssetPicker from '@/components/AssetPicker';
+import CanvasEditor from '@/components/CanvasEditor';
 import ExportModal from '@/components/ExportModal';
 import { getAllBrands } from '@/lib/brands';
 import { collectLocalAssetUrls } from '@/lib/export';
@@ -96,7 +97,7 @@ function EditorContent() {
   const [refineField, setRefineField] = useState<string | null>(null);
 
   // Advanced features states
-  const [activeTab, setActiveTab] = useState<'editor' | 'abtest' | 'drafts'>('editor');
+  const [activeTab, setActiveTab] = useState<'editor' | 'canvas' | 'drafts'>('editor');
   const [savedDrafts, setSavedDrafts] = useState<Draft[]>([]);
   const [newDraftName, setNewDraftName] = useState('');
   const [abVariations, setAbVariations] = useState<{ subjects?: { type: string; text: string }[]; preheaders?: string[] } | null>(null);
@@ -106,6 +107,18 @@ function EditorContent() {
   const [testMessageUrl, setTestMessageUrl] = useState<string | null>(null);
   const [simulatedDarkMode, setSimulatedDarkMode] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(600);
+
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    brand: true,
+    blocks: true,
+    styles: false,
+    content: true,
+    health: false,
+  });
+
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -1135,21 +1148,21 @@ function EditorContent() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActiveTab('abtest')}
+                    onClick={() => setActiveTab('canvas')}
                     style={{
                       flex: 1,
                       padding: '8px 10px',
                       border: 'none',
                       borderRadius: '100px',
-                      background: activeTab === 'abtest' ? 'var(--accent-gradient)' : 'transparent',
-                      color: activeTab === 'abtest' ? '#ffffff' : 'var(--text-secondary)',
+                      background: activeTab === 'canvas' ? 'var(--accent-gradient)' : 'transparent',
+                      color: activeTab === 'canvas' ? '#ffffff' : 'var(--text-secondary)',
                       fontSize: 11,
                       fontWeight: 700,
                       cursor: 'pointer',
                       transition: 'all var(--transition-fast)',
                     }}
                   >
-                    🧪 Variantes A/B
+                    🧱 Canvas
                   </button>
                   <button
                     type="button"
@@ -1173,775 +1186,753 @@ function EditorContent() {
 
                 {/* TAB 1: CONTENT EDITOR */}
                 {activeTab === 'editor' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, overflowY: 'auto', paddingRight: 4 }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', borderBottom: '1px solid var(--border-subtle)', paddingBottom: 10, margin: 0 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, overflowY: 'auto', paddingRight: 4 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', borderBottom: '1px solid var(--border-subtle)', paddingBottom: 10, margin: '0 0 8px 0' }}>
                       ⚙️ Configuración & Contenido
                     </h3>
-                
-                {/* Brand Selector */}
-                <div className="form-group">
-                  <label htmlFor="brand-selector" className="form-label">Marca</label>
-                  <select
-                    id="brand-selector"
-                    className="form-select"
-                    value={selectedBrandId}
-                    onChange={e => setSelectedBrandId(e.target.value)}
-                  >
-                    {brands.map(b => (
-                      <option key={b.id} value={b.id}>
-                        {b.isFavorite ? '★ ' : ''}{b.name} — {b.category}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedBrand && (
-                    <>
-                      <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', marginTop: 8, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.5)' }}>
-                        <div style={{ flex: 1, background: selectedBrand.colors.primary }} />
-                        <div style={{ flex: 1, background: selectedBrand.colors.accent }} />
-                        <div style={{ flex: 1, background: `linear-gradient(90deg, ${selectedBrand.colors.gradientStart}, ${selectedBrand.colors.gradientEnd})` }} />
-                      </div>
+
+                    {/* Módulo 1: Marca & Plantilla */}
+                    <div className={`accordion-module ${expandedSections.brand ? 'open' : ''}`}>
                       <button
                         type="button"
-                        className="btn btn-secondary btn-sm"
-                        onClick={applyBrandColors}
-                        style={{ marginTop: 10, width: '100%', gap: 6, fontSize: 11, padding: '6px 12px' }}
+                        className="accordion-header"
+                        onClick={() => toggleSection('brand')}
+                        aria-expanded={expandedSections.brand}
                       >
-                        🎨 Aplicar colores de marca
+                        <span className="accordion-title">🏢 Marca & Plantilla Base</span>
+                        <span className="accordion-icon" aria-hidden="true">{expandedSections.brand ? '▲' : '▼'}</span>
                       </button>
-                    </>
-                  )}
-                </div>
-
-                {/* Template Selector */}
-                <div className="form-group" style={{ marginTop: 20 }}>
-                  <label className="form-label">Plantilla Base</label>
-                  <div className="template-grid">
-                    {TEMPLATES.map(t => (
-                      <div
-                        key={t.type}
-                        className={`template-card ${selectedTemplate === t.type ? 'selected' : ''}`}
-                        onClick={() => setSelectedTemplate(t.type)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelectedTemplate(t.type); }}
-                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 10px', borderRadius: 'var(--radius-md)' }}
-                      >
-                        <div className="template-icon" style={{ fontSize: 24 }} aria-hidden="true">{t.icon}</div>
-                        <div className="template-name" style={{ fontSize: 12, fontWeight: 600 }}>{t.name}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* ====== BLOQUES & LAYOUT ====== */}
-                <div style={{ height: 1, background: 'var(--border-subtle)', margin: '24px 0' }} />
-                <h4 style={{ margin: '0 0 12px 0', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                  🧱 Bloques & Layout
-                </h4>
-
-                {/* Selector de layout */}
-                <div className="form-group">
-                  <label className="form-label">Diseño del email</label>
-                  <div className="template-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-                    {LAYOUT_OPTIONS.map(l => (
-                      <div
-                        key={l.id}
-                        className={`template-card ${(content.layout || 'classic') === l.id ? 'selected' : ''}`}
-                        onClick={() => setBlockValue({ layout: l.id })}
-                        role="button"
-                        tabIndex={0}
-                        title={l.description}
-                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setBlockValue({ layout: l.id }); }}
-                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 6px', borderRadius: 'var(--radius-md)' }}
-                      >
-                        <div style={{ fontSize: 18 }} aria-hidden="true">{l.icon}</div>
-                        <div style={{ fontSize: 10, fontWeight: 600 }}>{l.name}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Bloque: Hero */}
-                <div className="form-group">
-                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(content.hero)}
-                      onChange={e => setBlockValue({ hero: e.target.checked ? { imageUrl: '', fullBleed: true } : undefined })}
-                    />
-                    🖼️ Imagen Hero {content.layout === 'hero' ? '(arriba de todo)' : '(bajo el header)'}
-                  </label>
-                  {content.hero && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border-subtle)' }}>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <input
-                          id="content-hero"
-                          className="form-input"
-                          value={content.hero.imageUrl}
-                          onChange={e => setBlockValue({ hero: { ...content.hero!, imageUrl: e.target.value } })}
-                          placeholder="URL de la imagen hero…"
-                          spellCheck={false}
-                          style={{ flex: 1, fontSize: 12 }}
-                        />
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAssetPickerTarget('hero')} style={{ fontSize: 11, flexShrink: 0 }}>
-                          🖼️ Elegir
-                        </button>
-                      </div>
-                      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                        <input
-                          className="form-input"
-                          value={content.hero.href || ''}
-                          onChange={e => setBlockValue({ hero: { ...content.hero!, href: e.target.value } })}
-                          placeholder="Link al hacer clic (opcional)…"
-                          spellCheck={false}
-                          style={{ flex: 1, fontSize: 12 }}
-                        />
-                        <label style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}>
-                          <input
-                            type="checkbox"
-                            checked={content.hero.fullBleed !== false}
-                            onChange={e => setBlockValue({ hero: { ...content.hero!, fullBleed: e.target.checked } })}
-                          />
-                          Sin margen
-                        </label>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Bloque: Imagen + Texto */}
-                <div className="form-group">
-                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(content.imageText)}
-                      onChange={e => setBlockValue({ imageText: e.target.checked ? { imageUrl: '', text: '', imagePosition: 'left' } : undefined })}
-                    />
-                    📰 Imagen + Texto
-                  </label>
-                  {content.imageText && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border-subtle)' }}>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <input
-                          id="content-imageText"
-                          className="form-input"
-                          value={content.imageText.imageUrl}
-                          onChange={e => setBlockValue({ imageText: { ...content.imageText!, imageUrl: e.target.value } })}
-                          placeholder="URL de la imagen…"
-                          spellCheck={false}
-                          style={{ flex: 1, fontSize: 12 }}
-                        />
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAssetPickerTarget('imageText')} style={{ fontSize: 11, flexShrink: 0 }}>
-                          🖼️ Elegir
-                        </button>
-                      </div>
-                      <input
-                        className="form-input"
-                        value={content.imageText.title || ''}
-                        onChange={e => setBlockValue({ imageText: { ...content.imageText!, title: e.target.value } })}
-                        placeholder="Título del bloque (opcional)…"
-                        style={{ fontSize: 12 }}
-                      />
-                      <textarea
-                        className="form-textarea"
-                        value={content.imageText.text}
-                        onChange={e => setBlockValue({ imageText: { ...content.imageText!, text: e.target.value } })}
-                        placeholder="Texto que acompaña a la imagen…"
-                        rows={3}
-                        style={{ fontSize: 12 }}
-                      />
-                      <select
-                        aria-label="Posición de la imagen"
-                        className="form-select"
-                        value={content.imageText.imagePosition}
-                        onChange={e => setBlockValue({ imageText: { ...content.imageText!, imagePosition: e.target.value as 'left' | 'right' } })}
-                        style={{ fontSize: 12, width: 180 }}
-                      >
-                        <option value="left">Imagen a la izquierda</option>
-                        <option value="right">Imagen a la derecha</option>
-                      </select>
-                    </div>
-                  )}
-                </div>
-
-                {/* Bloque: Galería / Adset */}
-                <div className="form-group">
-                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(content.gallery)}
-                      onChange={e => setBlockValue({ gallery: e.target.checked ? { images: [{ url: '' }, { url: '' }], columns: 2 } : undefined })}
-                    />
-                    🎞️ Galería de imágenes (adsets)
-                  </label>
-                  {content.gallery && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border-subtle)' }}>
-                      {content.gallery.images.map((img, i) => (
-                        <div key={i} style={{ display: 'flex', gap: 6 }}>
-                          <input
-                            className="form-input"
-                            value={img.url}
-                            onChange={e => {
-                              const images = content.gallery!.images.map((im, j) => (j === i ? { ...im, url: e.target.value } : im));
-                              setBlockValue({ gallery: { ...content.gallery!, images } });
-                            }}
-                            placeholder={`Imagen ${i + 1}…`}
-                            spellCheck={false}
-                            style={{ flex: 1, fontSize: 12 }}
-                          />
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAssetPickerTarget(`gallery-${i}`)} style={{ fontSize: 11, flexShrink: 0 }}>
-                            🖼️
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-icon"
-                            onClick={() => {
-                              const images = content.gallery!.images.filter((_, j) => j !== i);
-                              setBlockValue({ gallery: images.length ? { ...content.gallery!, images } : undefined });
-                            }}
-                            aria-label={`Quitar imagen ${i + 1}`}
-                            style={{ fontSize: 12, height: 36, flexShrink: 0 }}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => setBlockValue({ gallery: { ...content.gallery!, images: [...content.gallery!.images, { url: '' }] } })}
-                          style={{ fontSize: 11 }}
-                        >
-                          + Agregar imagen
-                        </button>
-                        <select
-                          aria-label="Columnas de la galería"
-                          className="form-select"
-                          value={content.gallery.columns}
-                          onChange={e => setBlockValue({ gallery: { ...content.gallery!, columns: parseInt(e.target.value, 10) === 3 ? 3 : 2 } })}
-                          style={{ fontSize: 12, width: 130 }}
-                        >
-                          <option value={2}>2 columnas</option>
-                          <option value={3}>3 columnas</option>
-                        </select>
-                      </div>
-                      <input
-                        className="form-input"
-                        value={content.gallery.caption || ''}
-                        onChange={e => setBlockValue({ gallery: { ...content.gallery!, caption: e.target.value } })}
-                        placeholder="Pie de galería (opcional)…"
-                        style={{ fontSize: 12 }}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Bloque: Testimonio */}
-                <div className="form-group">
-                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(content.quote)}
-                      onChange={e => setBlockValue({ quote: e.target.checked ? { text: '' } : undefined })}
-                    />
-                    💬 Testimonio / Cita
-                  </label>
-                  {content.quote && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border-subtle)' }}>
-                      <textarea
-                        id="content-quote"
-                        className="form-textarea"
-                        value={content.quote.text}
-                        onChange={e => setBlockValue({ quote: { ...content.quote!, text: e.target.value } })}
-                        placeholder="Texto del testimonio…"
-                        rows={2}
-                        style={{ fontSize: 12 }}
-                      />
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                        <input
-                          className="form-input"
-                          value={content.quote.author || ''}
-                          onChange={e => setBlockValue({ quote: { ...content.quote!, author: e.target.value } })}
-                          placeholder="Autor (opcional)…"
-                          style={{ fontSize: 12 }}
-                        />
-                        <input
-                          className="form-input"
-                          value={content.quote.role || ''}
-                          onChange={e => setBlockValue({ quote: { ...content.quote!, role: e.target.value } })}
-                          placeholder="Cargo / detalle…"
-                          style={{ fontSize: 12 }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Separadores */}
-                <div className="form-group">
-                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(content.showDividers)}
-                      onChange={e => setBlockValue({ showDividers: e.target.checked })}
-                    />
-                    ➖ Separadores sutiles entre secciones
-                  </label>
-                </div>
-
-                {/* ====== STYLING & BACKGROUND OPTIONS ====== */}
-                <div style={{ height: 1, background: 'var(--border-subtle)', margin: '24px 0' }} />
-                <h4 style={{ margin: '0 0 12px 0', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                  🎨 Estilos & Fondos
-                </h4>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div className="form-group">
-                    <label htmlFor="email-bg-color" className="form-label">Fondo Email</label>
-                    <div className="form-color-group">
-                      <input
-                        id="email-bg-color"
-                        type="color"
-                        className="form-color-input"
-                        value={content.emailBgColor || '#eef2f6'}
-                        onChange={e => updateContent('emailBgColor', e.target.value)}
-                        spellCheck={false}
-                      />
-                      <input
-                        type="text"
-                        className="form-input form-color-hex"
-                        value={content.emailBgColor || '#eef2f6'}
-                        onChange={e => updateContent('emailBgColor', e.target.value)}
-                        placeholder="#eef2f6"
-                        maxLength={7}
-                        spellCheck={false}
-                      />
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="body-bg-color" className="form-label">Fondo Body</label>
-                    <div className="form-color-group">
-                      <input
-                        id="body-bg-color"
-                        type="color"
-                        className="form-color-input"
-                        value={content.bodyBgColor || '#ffffff'}
-                        onChange={e => updateContent('bodyBgColor', e.target.value)}
-                        spellCheck={false}
-                      />
-                      <input
-                        type="text"
-                        className="form-input form-color-hex"
-                        value={content.bodyBgColor || '#ffffff'}
-                        onChange={e => updateContent('bodyBgColor', e.target.value)}
-                        placeholder="#ffffff"
-                        maxLength={7}
-                        spellCheck={false}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="email-texture" className="form-label">Textura del Email</label>
-                  <select
-                    id="email-texture"
-                    className="form-select"
-                    value={content.textureUrl || ''}
-                    onChange={e => updateContent('textureUrl', e.target.value)}
-                  >
-                    {TEXTURE_PRESETS.map(p => (
-                      <option key={p.name} value={p.url}>{p.name}</option>
-                    ))}
-                  </select>
-                  {content.textureUrl && (
-                    <input
-                      className="form-input"
-                      value={content.textureUrl}
-                      onChange={e => updateContent('textureUrl', e.target.value)}
-                      placeholder="URL de textura customizada…"
-                      style={{ marginTop: 8 }}
-                      spellCheck={false}
-                    />
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="header-texture" className="form-label">Textura del Header (Opcional)</label>
-                  <select
-                    id="header-texture"
-                    className="form-select"
-                    value={content.headerTextureUrl || ''}
-                    onChange={e => updateContent('headerTextureUrl', e.target.value)}
-                  >
-                    {TEXTURE_PRESETS.map(p => (
-                      <option key={p.name} value={p.url}>{p.name}</option>
-                    ))}
-                  </select>
-                  {content.headerTextureUrl && (
-                    <input
-                      className="form-input"
-                      value={content.headerTextureUrl}
-                      onChange={e => updateContent('headerTextureUrl', e.target.value)}
-                      placeholder="URL de textura para el header…"
-                      style={{ marginTop: 8 }}
-                      spellCheck={false}
-                    />
-                  )}
-                </div>
-
-                {/* Divider */}
-                <div style={{ height: 1, background: 'var(--border-subtle)', margin: '24px 0' }} />
-                <h4 style={{ margin: '0 0 12px 0', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                  📝 Contenido del Correo
-                </h4>
-
-                {/* Content Form */}
-                <div className="form-group">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label htmlFor="content-label" className="form-label" style={{ margin: 0 }}>Etiqueta superior</label>
-                    {renderInlineAiActions('label')}
-                  </div>
-                  <input
-                    id="content-label"
-                    className="form-input"
-                    value={content.label}
-                    onChange={e => updateContent('label', e.target.value)}
-                    onBlur={() => saveHistory(content)}
-                    placeholder="Ej: Masterclass gratuita…"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label htmlFor="content-headline" className="form-label" style={{ margin: 0 }}>Título principal</label>
-                    {renderInlineAiActions('headline')}
-                  </div>
-                  <input
-                    id="content-headline"
-                    className="form-input"
-                    value={content.headline}
-                    onChange={e => updateContent('headline', e.target.value)}
-                    onBlur={() => saveHistory(content)}
-                    placeholder="Ej: Aprende a reparar tu crédito…"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label htmlFor="content-body" className="form-label" style={{ margin: 0 }}>Texto del cuerpo</label>
-                    {renderInlineAiActions('body')}
-                  </div>
-                  <textarea
-                    id="content-body"
-                    className="form-textarea"
-                    value={content.body}
-                    onChange={e => updateContent('body', e.target.value)}
-                    onBlur={() => saveHistory(content)}
-                    placeholder="Texto principal del email. Puedes usar {{contact.first_name}} para personalizar…"
-                    rows={6}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label htmlFor="bullets-title" className="form-label" style={{ margin: 0 }}>Título de bullets</label>
-                    {renderInlineAiActions('bulletsTitle')}
-                  </div>
-                  <input
-                    id="bullets-title"
-                    className="form-input"
-                    value={content.bulletsTitle}
-                    onChange={e => updateContent('bulletsTitle', e.target.value)}
-                    onBlur={() => saveHistory(content)}
-                    placeholder="Ej: En esta clase vas a descubrir…"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Bullets</label>
-                  <div className="bullet-list">
-                    {content.bullets.map((bullet, i) => (
-                      <div key={i} className="bullet-item" style={{ display: 'flex', gap: 6, alignItems: 'flex-end', marginBottom: 12 }}>
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Punto {i + 1}</span>
-                            {renderInlineAiActions('bullets', i)}
-                          </div>
-                          <input
-                            className="form-input"
-                            value={bullet}
-                            onChange={e => updateBullet(i, e.target.value)}
-                            onBlur={() => saveHistory(content)}
-                            placeholder={`Punto clave ${i + 1}…`}
-                          />
-                        </div>
-                        <button
-                          className="btn btn-ghost btn-icon"
-                          onClick={() => removeBullet(i)}
-                          title="Eliminar"
-                          aria-label={`Eliminar punto ${i + 1}`}
-                          style={{ fontSize: 13, height: 40 }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                    <button className="btn btn-ghost btn-sm" onClick={addBullet} style={{ alignSelf: 'flex-start', fontSize: 12, marginTop: 4 }}>
-                      + Agregar bullet
-                    </button>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div className="form-group">
-                    <label htmlFor="event-date" className="form-label">📅 Fecha del evento</label>
-                    <input
-                      id="event-date"
-                      className="form-input"
-                      value={content.eventDate}
-                      onChange={e => updateContent('eventDate', e.target.value)}
-                      onBlur={() => saveHistory(content)}
-                      placeholder="Ej: 18 de julio…"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="event-time" className="form-label">🕐 Hora</label>
-                    <input
-                      id="event-time"
-                      className="form-input"
-                      value={content.eventTime}
-                      onChange={e => updateContent('eventTime', e.target.value)}
-                      onBlur={() => saveHistory(content)}
-                      placeholder="Ej: 11:00 AM…"
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label htmlFor="pre-cta" className="form-label" style={{ margin: 0 }}>Texto pre-CTA</label>
-                    {renderInlineAiActions('preCta')}
-                  </div>
-                  <input
-                    id="pre-cta"
-                    className="form-input"
-                    value={content.preCta}
-                    onChange={e => updateContent('preCta', e.target.value)}
-                    onBlur={() => saveHistory(content)}
-                    placeholder="Ej: Únete para recibir el acceso 👇…"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label className="form-label" style={{ margin: 0 }}>Botón CTA</label>
-                    {renderInlineAiActions('ctaText')}
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <input
-                      id="cta-text"
-                      aria-label="Texto del botón"
-                      className="form-input"
-                      value={content.ctaText}
-                      onChange={e => updateContent('ctaText', e.target.value)}
-                      onBlur={() => saveHistory(content)}
-                      placeholder="Texto del botón…"
-                    />
-                    <input
-                      id="cta-url"
-                      aria-label="URL de destino"
-                      className="form-input"
-                      value={content.ctaUrl}
-                      onChange={e => updateContent('ctaUrl', e.target.value)}
-                      onBlur={() => saveHistory(content)}
-                      placeholder="URL destino (GHL/Link)…"
-                      spellCheck={false}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label htmlFor="footer-note" className="form-label" style={{ margin: 0 }}>Nota al pie</label>
-                    {renderInlineAiActions('footerNote')}
-                  </div>
-                  <input
-                    id="footer-note"
-                    className="form-input"
-                    value={content.footerNote}
-                    onChange={e => updateContent('footerNote', e.target.value)}
-                    onBlur={() => saveHistory(content)}
-                    placeholder="Ej: Cupos limitados · Reserva tu lugar ahora…"
-                  />
-                </div>
-
-                {/* ====== ASISTENTE DE SALUD DEL EMAIL (Real-time Checker) ====== */}
-                {(() => {
-                  const getWordsCount = () => {
-                    const text = `${content.label} ${content.headline} ${content.body} ${content.bulletsTitle} ${content.bullets.join(' ')} ${content.preCta} ${content.ctaText} ${content.footerNote}`;
-                    return text.trim().split(/\s+/).filter(Boolean).length;
-                  };
-                  const words = getWordsCount();
-                  const readingTimeSeconds = Math.round(words / 3.3);
-                  const readingTimeStr = readingTimeSeconds < 60 
-                    ? `${readingTimeSeconds} seg` 
-                    : `${Math.round(readingTimeSeconds / 60)} min`;
-
-                  const SPAM_WORDS = [
-                    'GRATIS', '100% LIBRE', 'DINERO RAPIDO', 'URGENTE', 'COMPRAR AHORA', 
-                    'GANAR', 'OFERTA ESPECIAL', 'SIN COSTO', 'INGRESO EXTRA', 'INVERSION', 
-                    'GARANTIZADO', 'HAZLO HOY', 'ACCESO INMEDIATO', 'OFERTA UNICA'
-                  ];
-
-                  const textForSpam = `${content.headline} ${content.body}`.toUpperCase();
-                  const spamMatches = SPAM_WORDS.filter(word => textForSpam.includes(word));
-                  const isCtaValid = content.ctaUrl && content.ctaUrl !== '#' && content.ctaText.trim().length > 0;
-                  const hasPersonalization = content.body.includes('{{contact.first_name}}');
-
-                  return (
-                    <>
-                      <div style={{ height: 1, background: 'var(--border-subtle)', margin: '24px 0' }} />
-                      <h4 style={{ margin: '0 0 12px 0', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                        🩺 Salud & Métricas del Email
-                      </h4>
-                      <div className="glass-shell" style={{ padding: 4, background: 'rgba(10, 14, 23, 0.4)' }}>
-                        <div className="glass-core" style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
-                          {/* Reading time */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ color: 'var(--text-secondary)' }}>⏱️ Tiempo de lectura:</span>
-                            <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{readingTimeStr} ({words} palabras)</span>
-                          </div>
-
-                          {/* Personalization */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ color: 'var(--text-secondary)' }}>👤 Personalización:</span>
-                            {hasPersonalization ? (
-                              <span style={{ color: '#34d399', fontWeight: 600 }}>🟢 Activa (first_name)</span>
-                            ) : (
-                              <span style={{ color: '#fbbf24', fontWeight: 600 }}>🟡 Añade variables</span>
+                      {expandedSections.brand && (
+                        <div className="accordion-content">
+                          {/* Brand Selector */}
+                          <div className="form-group">
+                            <label htmlFor="brand-selector" className="form-label">Marca</label>
+                            <select
+                              id="brand-selector"
+                              className="form-select"
+                              value={selectedBrandId}
+                              onChange={e => setSelectedBrandId(e.target.value)}
+                            >
+                              {brands.map(b => (
+                                <option key={b.id} value={b.id}>
+                                  {b.isFavorite ? '★ ' : ''}{b.name} — {b.category}
+                                </option>
+                              ))}
+                            </select>
+                            {selectedBrand && (
+                              <>
+                                <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', marginTop: 8, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.5)' }}>
+                                  <div style={{ flex: 1, background: selectedBrand.colors.primary }} />
+                                  <div style={{ flex: 1, background: selectedBrand.colors.accent }} />
+                                  <div style={{ flex: 1, background: `linear-gradient(90deg, ${selectedBrand.colors.gradientStart}, ${selectedBrand.colors.gradientEnd})` }} />
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={applyBrandColors}
+                                  style={{ marginTop: 10, width: '100%', gap: 6, fontSize: 11, padding: '6px 12px' }}
+                                >
+                                  🎨 Aplicar colores de marca
+                                </button>
+                              </>
                             )}
                           </div>
 
-                          {/* CTA valid */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ color: 'var(--text-secondary)' }}>🔗 Botón CTA:</span>
-                            {isCtaValid ? (
-                              <span style={{ color: '#34d399', fontWeight: 600 }}>🟢 Configurado</span>
-                            ) : (
-                              <span style={{ color: '#f87171', fontWeight: 600 }}>🔴 Enlace ausente</span>
-                            )}
-                          </div>
-
-                          {/* Spam matches */}
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid var(--border-subtle)', paddingTop: 8, marginTop: 4 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ color: 'var(--text-secondary)' }}>🛡️ Detección de Spam:</span>
-                              {spamMatches.length === 0 ? (
-                                <span style={{ color: '#34d399', fontWeight: 600 }}>🟢 0 palabras de riesgo</span>
-                              ) : (
-                                <span style={{ color: '#f87171', fontWeight: 600 }}>🔴 {spamMatches.length} detectadas</span>
-                              )}
+                          {/* Template Selector */}
+                          <div className="form-group" style={{ marginTop: 4 }}>
+                            <label className="form-label">Plantilla Base</label>
+                            <div className="template-grid">
+                              {TEMPLATES.map(t => (
+                                <div
+                                  key={t.type}
+                                  className={`template-card ${selectedTemplate === t.type ? 'selected' : ''}`}
+                                  onClick={() => setSelectedTemplate(t.type)}
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelectedTemplate(t.type); }}
+                                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 10px', borderRadius: 'var(--radius-md)' }}
+                                >
+                                  <div className="template-icon" style={{ fontSize: 24 }} aria-hidden="true">{t.icon}</div>
+                                  <div className="template-name" style={{ fontSize: 12, fontWeight: 600 }}>{t.name}</div>
+                                </div>
+                              ))}
                             </div>
-                            {spamMatches.length > 0 && (
-                              <div style={{ fontSize: 11, color: 'var(--text-muted)', background: 'rgba(239, 68, 68, 0.05)', padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239, 68, 68, 0.1)', marginTop: 4 }}>
-                                Evita: {spamMatches.join(', ')} para mejorar entregabilidad.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Módulo 2: Estructura & Bloques */}
+                    <div className={`accordion-module ${expandedSections.blocks ? 'open' : ''}`}>
+                      <button
+                        type="button"
+                        className="accordion-header"
+                        onClick={() => toggleSection('blocks')}
+                        aria-expanded={expandedSections.blocks}
+                      >
+                        <span className="accordion-title">🧱 Estructura & Bloques</span>
+                        <span className="accordion-icon" aria-hidden="true">{expandedSections.blocks ? '▲' : '▼'}</span>
+                      </button>
+                      {expandedSections.blocks && (
+                        <div className="accordion-content">
+                          {/* Selector de layout */}
+                          <div className="form-group">
+                            <label className="form-label">Diseño del email</label>
+                            <div className="template-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                              {LAYOUT_OPTIONS.map(l => (
+                                <div
+                                  key={l.id}
+                                  className={`template-card ${(content.layout || 'classic') === l.id ? 'selected' : ''}`}
+                                  onClick={() => setBlockValue({ layout: l.id })}
+                                  role="button"
+                                  tabIndex={0}
+                                  title={l.description}
+                                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setBlockValue({ layout: l.id }); }}
+                                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 6px', borderRadius: 'var(--radius-md)' }}
+                                >
+                                  <div style={{ fontSize: 18 }} aria-hidden="true">{l.icon}</div>
+                                  <div style={{ fontSize: 10, fontWeight: 600 }}>{l.name}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Bloque: Hero */}
+                          <div className="form-group">
+                            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={Boolean(content.hero)}
+                                onChange={e => setBlockValue({ hero: e.target.checked ? { imageUrl: '', fullBleed: true } : undefined })}
+                              />
+                              🖼️ Imagen Hero {content.layout === 'hero' ? '(arriba de todo)' : '(bajo el header)'}
+                            </label>
+                            {content.hero && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border-subtle)' }}>
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                  <input
+                                    id="content-hero"
+                                    className="form-input"
+                                    value={content.hero.imageUrl}
+                                    onChange={e => setBlockValue({ hero: { ...content.hero!, imageUrl: e.target.value } })}
+                                    placeholder="URL de la imagen hero…"
+                                    spellCheck={false}
+                                    style={{ flex: 1, fontSize: 12 }}
+                                  />
+                                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAssetPickerTarget('hero')} style={{ fontSize: 11, flexShrink: 0 }}>
+                                    🖼️ Elegir
+                                  </button>
+                                </div>
+                                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                                  <input
+                                    className="form-input"
+                                    value={content.hero.href || ''}
+                                    onChange={e => setBlockValue({ hero: { ...content.hero!, href: e.target.value } })}
+                                    placeholder="Link al hacer clic (opcional)…"
+                                    spellCheck={false}
+                                    style={{ flex: 1, fontSize: 12 }}
+                                  />
+                                  <label style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={content.hero.fullBleed !== false}
+                                      onChange={e => setBlockValue({ hero: { ...content.hero!, fullBleed: e.target.checked } })}
+                                    />
+                                    Sin margen
+                                  </label>
+                                </div>
                               </div>
                             )}
                           </div>
+
+                          {/* Bloque: Imagen + Texto */}
+                          <div className="form-group">
+                            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={Boolean(content.imageText)}
+                                onChange={e => setBlockValue({ imageText: e.target.checked ? { imageUrl: '', text: '', imagePosition: 'left' } : undefined })}
+                              />
+                              📰 Imagen + Texto
+                            </label>
+                            {content.imageText && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border-subtle)' }}>
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                  <input
+                                    id="content-imageText"
+                                    className="form-input"
+                                    value={content.imageText.imageUrl}
+                                    onChange={e => setBlockValue({ imageText: { ...content.imageText!, imageUrl: e.target.value } })}
+                                    placeholder="URL de la imagen…"
+                                    spellCheck={false}
+                                    style={{ flex: 1, fontSize: 12 }}
+                                  />
+                                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAssetPickerTarget('imageText')} style={{ fontSize: 11, flexShrink: 0 }}>
+                                    🖼️ Elegir
+                                  </button>
+                                </div>
+                                <input
+                                  className="form-input"
+                                  value={content.imageText.title || ''}
+                                  onChange={e => setBlockValue({ imageText: { ...content.imageText!, title: e.target.value } })}
+                                  placeholder="Título del bloque (opcional)…"
+                                  style={{ fontSize: 12 }}
+                                />
+                                <textarea
+                                  className="form-textarea"
+                                  value={content.imageText.text}
+                                  onChange={e => setBlockValue({ imageText: { ...content.imageText!, text: e.target.value } })}
+                                  placeholder="Texto que acompaña a la imagen…"
+                                  rows={3}
+                                  style={{ fontSize: 12 }}
+                                />
+                                <select
+                                  aria-label="Posición de la imagen"
+                                  className="form-select"
+                                  value={content.imageText.imagePosition}
+                                  onChange={e => setBlockValue({ imageText: { ...content.imageText!, imagePosition: e.target.value as 'left' | 'right' } })}
+                                  style={{ fontSize: 12, width: 180 }}
+                                >
+                                  <option value="left">Imagen a la izquierda</option>
+                                  <option value="right">Imagen a la derecha</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Bloque: Galería / Adset */}
+                          <div className="form-group">
+                            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={Boolean(content.gallery)}
+                                onChange={e => setBlockValue({ gallery: e.target.checked ? { images: [{ url: '' }, { url: '' }], columns: 2 } : undefined })}
+                              />
+                              🎞️ Galería de imágenes (adsets)
+                            </label>
+                            {content.gallery && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border-subtle)' }}>
+                                {content.gallery.images.map((img, i) => (
+                                  <div key={i} style={{ display: 'flex', gap: 6 }}>
+                                    <input
+                                      className="form-input"
+                                      value={img.url}
+                                      onChange={e => {
+                                        const images = content.gallery!.images.map((im, j) => (j === i ? { ...im, url: e.target.value } : im));
+                                        setBlockValue({ gallery: { ...content.gallery!, images } });
+                                      }}
+                                      placeholder={`Imagen ${i + 1}…`}
+                                      spellCheck={false}
+                                      style={{ flex: 1, fontSize: 12 }}
+                                    />
+                                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAssetPickerTarget(`gallery-${i}`)} style={{ fontSize: 11, flexShrink: 0 }}>
+                                      🖼️
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost btn-icon"
+                                      onClick={() => {
+                                        const images = content.gallery!.images.filter((_, j) => j !== i);
+                                        setBlockValue({ gallery: images.length ? { ...content.gallery!, images } : undefined });
+                                      }}
+                                      aria-label={`Quitar imagen ${i + 1}`}
+                                      style={{ fontSize: 12, height: 36, flexShrink: 0 }}
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                ))}
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => setBlockValue({ gallery: { ...content.gallery!, images: [...content.gallery!.images, { url: '' }] } })}
+                                    style={{ fontSize: 11 }}
+                                  >
+                                    + Agregar imagen
+                                  </button>
+                                  <select
+                                    aria-label="Columnas de la galería"
+                                    className="form-select"
+                                    value={content.gallery.columns}
+                                    onChange={e => setBlockValue({ gallery: { ...content.gallery!, columns: parseInt(e.target.value, 10) === 3 ? 3 : 2 } })}
+                                    style={{ fontSize: 12, width: 130 }}
+                                  >
+                                    <option value={2}>2 columnas</option>
+                                    <option value={3}>3 columnas</option>
+                                  </select>
+                                </div>
+                                <input
+                                  className="form-input"
+                                  value={content.gallery.caption || ''}
+                                  onChange={e => setBlockValue({ gallery: { ...content.gallery!, caption: e.target.value } })}
+                                  placeholder="Pie de galería (opcional)…"
+                                  style={{ fontSize: 12 }}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Bloque: Testimonio */}
+                          <div className="form-group">
+                            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={Boolean(content.quote)}
+                                onChange={e => setBlockValue({ quote: e.target.checked ? { text: '' } : undefined })}
+                              />
+                              💬 Testimonio / Cita
+                            </label>
+                            {content.quote && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border-subtle)' }}>
+                                <textarea
+                                  id="content-quote"
+                                  className="form-textarea"
+                                  value={content.quote.text}
+                                  onChange={e => setBlockValue({ quote: { ...content.quote!, text: e.target.value } })}
+                                  placeholder="Texto del testimonio…"
+                                  rows={2}
+                                  style={{ fontSize: 12 }}
+                                />
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                                  <input
+                                    className="form-input"
+                                    value={content.quote.author || ''}
+                                    onChange={e => setBlockValue({ quote: { ...content.quote!, author: e.target.value } })}
+                                    placeholder="Autor (opcional)…"
+                                    style={{ fontSize: 12 }}
+                                  />
+                                  <input
+                                    className="form-input"
+                                    value={content.quote.role || ''}
+                                    onChange={e => setBlockValue({ quote: { ...content.quote!, role: e.target.value } })}
+                                    placeholder="Cargo / detalle…"
+                                    style={{ fontSize: 12 }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Separadores */}
+                          <div className="form-group">
+                            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={Boolean(content.showDividers)}
+                                onChange={e => setBlockValue({ showDividers: e.target.checked })}
+                              />
+                              ➖ Separadores sutiles entre secciones
+                            </label>
+                          </div>
                         </div>
-                      </div>
-                    </>
-                  );
-                })()}
+                      )}
+                    </div>
+
+                    {/* Módulo 3: Estilos & Fondos */}
+                    <div className={`accordion-module ${expandedSections.styles ? 'open' : ''}`}>
+                      <button
+                        type="button"
+                        className="accordion-header"
+                        onClick={() => toggleSection('styles')}
+                        aria-expanded={expandedSections.styles}
+                      >
+                        <span className="accordion-title">🎨 Estilos & Fondos</span>
+                        <span className="accordion-icon" aria-hidden="true">{expandedSections.styles ? '▲' : '▼'}</span>
+                      </button>
+                      {expandedSections.styles && (
+                        <div className="accordion-content">
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div className="form-group">
+                              <label htmlFor="email-bg-color" className="form-label">Fondo Email</label>
+                              <div className="form-color-group">
+                                <input
+                                  id="email-bg-color"
+                                  type="color"
+                                  className="form-color-input"
+                                  value={content.emailBgColor || '#eef2f6'}
+                                  onChange={e => updateContent('emailBgColor', e.target.value)}
+                                  spellCheck={false}
+                                />
+                                <input
+                                  type="text"
+                                  className="form-input form-color-hex"
+                                  value={content.emailBgColor || '#eef2f6'}
+                                  onChange={e => updateContent('emailBgColor', e.target.value)}
+                                  placeholder="#eef2f6"
+                                  maxLength={7}
+                                  spellCheck={false}
+                                />
+                              </div>
+                            </div>
+                            <div className="form-group">
+                              <label htmlFor="body-bg-color" className="form-label">Fondo Body</label>
+                              <div className="form-color-group">
+                                <input
+                                  id="body-bg-color"
+                                  type="color"
+                                  className="form-color-input"
+                                  value={content.bodyBgColor || '#ffffff'}
+                                  onChange={e => updateContent('bodyBgColor', e.target.value)}
+                                  spellCheck={false}
+                                />
+                                <input
+                                  type="text"
+                                  className="form-input form-color-hex"
+                                  value={content.bodyBgColor || '#ffffff'}
+                                  onChange={e => updateContent('bodyBgColor', e.target.value)}
+                                  placeholder="#ffffff"
+                                  maxLength={7}
+                                  spellCheck={false}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="form-group">
+                            <label htmlFor="email-texture" className="form-label">Textura del Email</label>
+                            <select
+                              id="email-texture"
+                              className="form-select"
+                              value={content.textureUrl || ''}
+                              onChange={e => updateContent('textureUrl', e.target.value)}
+                            >
+                              {TEXTURE_PRESETS.map(p => (
+                                <option key={p.name} value={p.url}>{p.name}</option>
+                              ))}
+                            </select>
+                            {content.textureUrl && (
+                              <input
+                                className="form-input"
+                                value={content.textureUrl}
+                                onChange={e => updateContent('textureUrl', e.target.value)}
+                                placeholder="URL de textura customizada…"
+                                style={{ marginTop: 8 }}
+                                spellCheck={false}
+                              />
+                            )}
+                          </div>
+
+                          <div className="form-group">
+                            <label htmlFor="header-texture" className="form-label">Textura del Header (Opcional)</label>
+                            <select
+                              id="header-texture"
+                              className="form-select"
+                              value={content.headerTextureUrl || ''}
+                              onChange={e => updateContent('headerTextureUrl', e.target.value)}
+                            >
+                              {TEXTURE_PRESETS.map(p => (
+                                <option key={p.name} value={p.url}>{p.name}</option>
+                              ))}
+                            </select>
+                            {content.headerTextureUrl && (
+                              <input
+                                className="form-input"
+                                value={content.headerTextureUrl}
+                                onChange={e => updateContent('headerTextureUrl', e.target.value)}
+                                placeholder="URL de textura para el header…"
+                                style={{ marginTop: 8 }}
+                                spellCheck={false}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Módulo 4: Contenido del Correo */}
+                    <div className={`accordion-module ${expandedSections.content ? 'open' : ''}`}>
+                      <button
+                        type="button"
+                        className="accordion-header"
+                        onClick={() => toggleSection('content')}
+                        aria-expanded={expandedSections.content}
+                      >
+                        <span className="accordion-title">📝 Contenido del Correo</span>
+                        <span className="accordion-icon" aria-hidden="true">{expandedSections.content ? '▲' : '▼'}</span>
+                      </button>
+                      {expandedSections.content && (
+                        <div className="accordion-content">
+                          {/* Content Form */}
+                          <div className="form-group">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <label htmlFor="content-label" className="form-label" style={{ margin: 0 }}>Etiqueta superior</label>
+                              {renderInlineAiActions('label')}
+                            </div>
+                            <input
+                              id="content-label"
+                              className="form-input"
+                              value={content.label}
+                              onChange={e => updateContent('label', e.target.value)}
+                              onBlur={() => saveHistory(content)}
+                              placeholder="Ej: Masterclass gratuita…"
+                            />
+                          </div>
+
+                          <div className="form-group">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <label htmlFor="content-headline" className="form-label" style={{ margin: 0 }}>Título principal</label>
+                              {renderInlineAiActions('headline')}
+                            </div>
+                            <input
+                              id="content-headline"
+                              className="form-input"
+                              value={content.headline}
+                              onChange={e => updateContent('headline', e.target.value)}
+                              onBlur={() => saveHistory(content)}
+                              placeholder="Ej: Aprende a reparar tu crédito…"
+                            />
+                          </div>
+
+                          <div className="form-group">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <label htmlFor="content-body" className="form-label" style={{ margin: 0 }}>Texto del cuerpo</label>
+                              {renderInlineAiActions('body')}
+                            </div>
+                            <textarea
+                              id="content-body"
+                              className="form-textarea"
+                              value={content.body}
+                              onChange={e => updateContent('body', e.target.value)}
+                              onBlur={() => saveHistory(content)}
+                              placeholder="Texto principal del email. Puedes usar {{contact.first_name}} para personalizar…"
+                              rows={6}
+                            />
+                          </div>
+
+                          <div className="form-group">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <label htmlFor="bullets-title" className="form-label" style={{ margin: 0 }}>Título de bullets</label>
+                              {renderInlineAiActions('bulletsTitle')}
+                            </div>
+                            <input
+                              id="bullets-title"
+                              className="form-input"
+                              value={content.bulletsTitle}
+                              onChange={e => updateContent('bulletsTitle', e.target.value)}
+                              onBlur={() => saveHistory(content)}
+                              placeholder="Ej: En esta clase vas a descubrir…"
+                            />
+                          </div>
+
+                          <div className="form-group">
+                            <label className="form-label">Bullets</label>
+                            <div className="bullet-list">
+                              {content.bullets.map((bullet, i) => (
+                                <div key={i} className="bullet-item" style={{ display: 'flex', gap: 6, alignItems: 'flex-end', marginBottom: 12 }}>
+                                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Punto {i + 1}</span>
+                                      {renderInlineAiActions('bullets', i)}
+                                    </div>
+                                    <input
+                                      className="form-input"
+                                      value={bullet}
+                                      onChange={e => updateBullet(i, e.target.value)}
+                                      onBlur={() => saveHistory(content)}
+                                      placeholder={`Punto clave ${i + 1}…`}
+                                    />
+                                  </div>
+                                  <button
+                                    className="btn btn-ghost btn-icon"
+                                    onClick={() => removeBullet(i)}
+                                    title="Eliminar"
+                                    aria-label={`Eliminar punto ${i + 1}`}
+                                    style={{ fontSize: 13, height: 40 }}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                              <button className="btn btn-ghost btn-sm" onClick={addBullet} style={{ alignSelf: 'flex-start', fontSize: 12, marginTop: 4 }}>
+                                + Agregar bullet
+                              </button>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div className="form-group">
+                              <label htmlFor="event-date" className="form-label">📅 Fecha del evento</label>
+                              <input
+                                id="event-date"
+                                className="form-input"
+                                value={content.eventDate}
+                                onChange={e => updateContent('eventDate', e.target.value)}
+                                onBlur={() => saveHistory(content)}
+                                placeholder="Ej: 18 de julio…"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label htmlFor="event-time" className="form-label">🕐 Hora</label>
+                              <input
+                                id="event-time"
+                                className="form-input"
+                                value={content.eventTime}
+                                onChange={e => updateContent('eventTime', e.target.value)}
+                                onBlur={() => saveHistory(content)}
+                                placeholder="Ej: 11:00 AM…"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="form-group">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <label htmlFor="pre-cta" className="form-label" style={{ margin: 0 }}>Texto pre-CTA</label>
+                              {renderInlineAiActions('preCta')}
+                            </div>
+                            <input
+                              id="pre-cta"
+                              className="form-input"
+                              value={content.preCta}
+                              onChange={e => updateContent('preCta', e.target.value)}
+                              onBlur={() => saveHistory(content)}
+                              placeholder="Ej: Únete para recibir el acceso 👇…"
+                            />
+                          </div>
+
+                          <div className="form-group">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <label className="form-label" style={{ margin: 0 }}>Botón CTA</label>
+                              {renderInlineAiActions('ctaText')}
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                              <input
+                                id="cta-text"
+                                aria-label="Texto del botón"
+                                className="form-input"
+                                value={content.ctaText}
+                                onChange={e => updateContent('ctaText', e.target.value)}
+                                onBlur={() => saveHistory(content)}
+                                placeholder="Texto del botón…"
+                              />
+                              <input
+                                id="cta-url"
+                                aria-label="URL de destino"
+                                className="form-input"
+                                value={content.ctaUrl}
+                                onChange={e => updateContent('ctaUrl', e.target.value)}
+                                onBlur={() => saveHistory(content)}
+                                placeholder="URL destino (GHL/Link)…"
+                                spellCheck={false}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="form-group">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <label htmlFor="footer-note" className="form-label" style={{ margin: 0 }}>Nota al pie</label>
+                              {renderInlineAiActions('footerNote')}
+                            </div>
+                            <input
+                              id="footer-note"
+                              className="form-input"
+                              value={content.footerNote}
+                              onChange={e => updateContent('footerNote', e.target.value)}
+                              onBlur={() => saveHistory(content)}
+                              placeholder="Ej: Cupos limitados · Reserva tu lugar ahora…"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Módulo 5: Salud & Métricas */}
+                    <div className={`accordion-module ${expandedSections.health ? 'open' : ''}`}>
+                      <button
+                        type="button"
+                        className="accordion-header"
+                        onClick={() => toggleSection('health')}
+                        aria-expanded={expandedSections.health}
+                      >
+                        <span className="accordion-title">🩺 Salud & Métricas</span>
+                        <span className="accordion-icon" aria-hidden="true">{expandedSections.health ? '▲' : '▼'}</span>
+                      </button>
+                      {expandedSections.health && (
+                        <div className="accordion-content">
+                          {(() => {
+                            const getWordsCount = () => {
+                              const text = `${content.label} ${content.headline} ${content.body} ${content.bulletsTitle} ${content.bullets.join(' ')} ${content.preCta} ${content.ctaText} ${content.footerNote}`;
+                              return text.trim().split(/\s+/).filter(Boolean).length;
+                            };
+                            const words = getWordsCount();
+                            const readingTimeSeconds = Math.round(words / 3.3);
+                            const readingTimeStr = readingTimeSeconds < 60
+                              ? `${readingTimeSeconds} seg`
+                              : `${Math.round(readingTimeSeconds / 60)} min`;
+
+                            const SPAM_WORDS = [
+                              'GRATIS', '100% LIBRE', 'DINERO RAPIDO', 'URGENTE', 'COMPRAR AHORA',
+                              'GANAR', 'OFERTA ESPECIAL', 'SIN COSTO', 'INGRESO EXTRA', 'INVERSION',
+                              'GARANTIZADO', 'HAZLO HOY', 'ACCESO INMEDIATO', 'OFERTA UNICA'
+                            ];
+
+                            const textForSpam = `${content.headline} ${content.body}`.toUpperCase();
+                            const spamMatches = SPAM_WORDS.filter(word => textForSpam.includes(word));
+                            const isCtaValid = content.ctaUrl && content.ctaUrl !== '#' && content.ctaText.trim().length > 0;
+                            const hasPersonalization = content.body.includes('{{contact.first_name}}');
+
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
+                                {/* Reading time */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ color: 'var(--text-secondary)' }}>⏱️ Tiempo de lectura:</span>
+                                  <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{readingTimeStr} ({words} palabras)</span>
+                                </div>
+
+                                {/* Personalization */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ color: 'var(--text-secondary)' }}>👤 Personalización:</span>
+                                  {hasPersonalization ? (
+                                    <span style={{ color: '#34d399', fontWeight: 600 }}>🟢 Activa (first_name)</span>
+                                  ) : (
+                                    <span style={{ color: '#fbbf24', fontWeight: 600 }}>🟡 Añade variables</span>
+                                  )}
+                                </div>
+
+                                {/* CTA valid */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ color: 'var(--text-secondary)' }}>🔗 Botón CTA:</span>
+                                  {isCtaValid ? (
+                                    <span style={{ color: '#34d399', fontWeight: 600 }}>🟢 Configurado</span>
+                                  ) : (
+                                    <span style={{ color: '#f87171', fontWeight: 600 }}>🔴 Enlace ausente</span>
+                                  )}
+                                </div>
+
+                                {/* Spam matches */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid var(--border-subtle)', paddingTop: 8, marginTop: 4 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>🛡️ Detección de Spam:</span>
+                                    {spamMatches.length === 0 ? (
+                                      <span style={{ color: '#34d399', fontWeight: 600 }}>🟢 0 palabras de riesgo</span>
+                                    ) : (
+                                      <span style={{ color: '#f87171', fontWeight: 600 }}>🔴 {spamMatches.length} detectadas</span>
+                                    )}
+                                  </div>
+                                  {spamMatches.length > 0 && (
+                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', background: 'rgba(239, 68, 68, 0.05)', padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239, 68, 68, 0.1)', marginTop: 4 }}>
+                                      Evita: {spamMatches.join(', ')} para mejorar entregabilidad.
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
-                {/* TAB 2: A/B TESTING */}
-                {activeTab === 'abtest' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, overflowY: 'auto', paddingRight: 4 }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', borderBottom: '1px solid var(--border-subtle)', paddingBottom: 10, margin: 0 }}>
-                      🧪 Variantes A/B con IA
-                    </h3>
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                      Analiza el título y cuerpo del correo actual para generar asuntos creativos de alta apertura y preheaders complementarios.
-                    </p>
-                    
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={handleGenerateAb}
-                      disabled={generatingAb}
-                      style={{ width: '100%', gap: 8 }}
-                    >
-                      {generatingAb ? '🤖 Generando variantes...' : '⚡ Generar Variantes A/B'}
-                    </button>
 
-                    {abVariations ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 12 }}>
-                        <div>
-                          <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                            Variantes de Asunto
-                          </h4>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                            {abVariations.subjects?.map((sub, idx) => (
-                              <div key={idx} className="glass-shell" style={{ padding: 4 }}>
-                                <div className="glass-core" style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span className="badge badge-accent" style={{ fontSize: 9, padding: '2px 6px' }}>{sub.type}</span>
-                                    <button
-                                      className="btn btn-ghost btn-sm"
-                                      onClick={() => {
-                                        navigator.clipboard.writeText(sub.text);
-                                        showToast('📋 Asunto copiado');
-                                      }}
-                                      style={{ padding: '2px 6px', fontSize: 10, height: 'auto' }}
-                                    >
-                                      Copiar
-                                    </button>
-                                  </div>
-                                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{sub.text}</div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
 
-                        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 16 }}>
-                          <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                            Preheaders de Vista Previa
-                          </h4>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {abVariations.preheaders?.map((pre: string, idx: number) => (
-                              <div key={idx} className="glass-shell" style={{ padding: 4 }}>
-                                <div className="glass-core" style={{ padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                                  <span style={{ fontSize: 12, color: 'var(--text-primary)', fontStyle: 'italic' }}>&quot;{pre}&quot;</span>
-                                  <button
-                                    className="btn btn-ghost btn-sm"
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(pre);
-                                      showToast('📋 Preheader copiado');
-                                    }}
-                                    style={{ padding: '2px 6px', fontSize: 10, height: 'auto', flexShrink: 0 }}
-                                  >
-                                    Copiar
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="empty-state" style={{ padding: '30px 10px', marginTop: 12 }}>
-                        <div className="empty-icon" style={{ fontSize: 32 }}>🧪</div>
-                        <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', marginTop: 6 }}>
-                          No hay variantes generadas aún. Escribe el contenido de tu correo y presiona el botón superior.
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                {/* TAB 2: CANVAS BUILDER */}
+                {activeTab === 'canvas' && (
+                  <CanvasEditor
+                    content={content}
+                    brand={selectedBrand || null}
+                    onContentChange={(updates) => setContent(prev => ({ ...prev, ...updates }))}
+                  />
                 )}
 
                 {/* TAB 3: LIBRARY (DRAFTS & SMTP TEST) */}
@@ -2259,6 +2250,7 @@ function EditorContent() {
                     sandbox="allow-same-origin"
                     style={{
                       width: viewMode === 'desktop' ? previewWidth : 390,
+                      maxWidth: '100%',
                       borderRadius: 'var(--radius-md)',
                       boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
                       border: '1px solid rgba(255,255,255,0.05)',
@@ -2276,7 +2268,7 @@ function EditorContent() {
         {/* AI SETTINGS MODAL — keys de ambos motores + motor por defecto */}
         {apiKeyModalOpen && (
           <div className="modal-overlay" onClick={() => setApiKeyModalOpen(false)}>
-            <div className="glass-shell" onClick={e => e.stopPropagation()} style={{ width: 520, animation: 'slideUp 0.4s ease-out' }}>
+            <div className="glass-shell" onClick={e => e.stopPropagation()} style={{ width: 520, maxWidth: '90vw', animation: 'slideUp 0.4s ease-out' }}>
               <div className="glass-core" style={{ padding: 24 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 10 }}>
                   <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>🔑 Configurar IA</h2>

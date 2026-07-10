@@ -1,5 +1,5 @@
 // Template Engine — Generates email-client-compatible HTML
-import { Brand, EmailContent, GalleryBlock, HeroBlock, ImageTextBlock, LayoutVariant, QuoteBlock } from './types';
+import { BlockConfig, Brand, EmailContent, GalleryBlock, HeroBlock, ImageTextBlock, LayoutVariant, QuoteBlock } from './types';
 
 export interface RenderOptions {
   // Base pública para reescribir /api/assets/ al exportar (se aplica client-side en export.ts)
@@ -29,13 +29,40 @@ function lightenColor(hex: string, percent: number): string {
 }
 
 /**
+ * Detect if a hex color is dark using YIQ luminance formula
+ */
+function isColorDark(hex: string): boolean {
+  if (!hex) return true;
+  let color = hex.replace('#', '');
+  if (color.length === 3) {
+    color = color[0] + color[0] + color[1] + color[1] + color[2] + color[2];
+  }
+  if (color.length !== 6) return true;
+  const r = parseInt(color.substring(0, 2), 16);
+  const g = parseInt(color.substring(2, 4), 16);
+  const b = parseInt(color.substring(4, 6), 16);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq < 128;
+}
+
+/**
+ * Returns the correct logo version depending on background darkness
+ */
+function getEffectiveLogoUrl(brand: Brand, isBgDark: boolean): string {
+  if (brand.id === 'admediasolution' && brand.logo.value.includes('logo.png')) {
+    return isBgDark ? '/api/assets/admediasolution/logo-white.png' : '/api/assets/admediasolution/logo.png';
+  }
+  return brand.logo.value;
+}
+
+/**
  * Image logo, optionally with the business name next to / below it.
  * Table-based (MSO-safe) — never flexbox.
  */
-function renderImageLogoWithName(brand: Brand, width: number, fontSize: number): string {
-  const img = `<img src="${brand.logo.value}" alt="${brand.name}" width="${width}" style="display:block;max-width:${width}px;height:auto;" border="0">`;
+function renderImageLogoWithName(brand: Brand, width: number, fontSize: number, logoUrl: string): string {
+  const img = `<img src="${logoUrl}" alt="${brand.name}" width="${width}" style="display:block;max-width:${width}px;height:auto;" border="0">`;
   if (!brand.logo.showName) {
-    return `<img src="${brand.logo.value}" alt="${brand.name}" width="${width}" style="display:block;margin:0 auto;max-width:${width}px;height:auto;" border="0">`;
+    return `<img src="${logoUrl}" alt="${brand.name}" width="${width}" style="display:block;margin:0 auto;max-width:${width}px;height:auto;" border="0">`;
   }
   const nameHtml = `<span style="font-family:'${brand.fonts.heading}','Open Sans',Arial,sans-serif;font-size:${fontSize}px;font-weight:800;color:#ffffff;white-space:nowrap;">${brand.name}</span>`;
   if (brand.logo.namePosition === 'below') {
@@ -57,9 +84,12 @@ function renderImageLogoWithName(brand: Brand, width: number, fontSize: number):
 /**
  * Generate the logo HTML based on brand configuration
  */
-function renderLogo(brand: Brand): string {
+function renderLogo(brand: Brand, headerBg: string): string {
+  const isBgDark = isColorDark(headerBg);
+  const logoUrl = getEffectiveLogoUrl(brand, isBgDark);
+
   if (brand.logo.type === 'image') {
-    return renderImageLogoWithName(brand, brand.logo.imageWidth || 180, 22);
+    return renderImageLogoWithName(brand, brand.logo.imageWidth || 180, 22, logoUrl);
   }
 
   // Text logo — split by |
@@ -73,12 +103,15 @@ function renderLogo(brand: Brand): string {
 /**
  * Generate the footer logo HTML (smaller version)
  */
-function renderFooterLogo(brand: Brand): string {
+function renderFooterLogo(brand: Brand, footerBg: string): string {
+  const isBgDark = isColorDark(footerBg);
+  const logoUrl = getEffectiveLogoUrl(brand, isBgDark);
+
   if (brand.logo.type === 'image') {
     if (brand.logo.showName) {
-      return `<img src="${brand.logo.value}" alt="${brand.name}" width="120" style="display:block;margin:0 auto 6px;max-width:120px;height:auto;" border="0"><span style="font-family:'${brand.fonts.heading}','Open Sans',Arial,sans-serif;font-size:14px;font-weight:800;color:#ffffff;">${brand.name}</span>`;
+      return `<img src="${logoUrl}" alt="${brand.name}" width="120" style="display:block;margin:0 auto 6px;max-width:120px;height:auto;" border="0"><span style="font-family:'${brand.fonts.heading}','Open Sans',Arial,sans-serif;font-size:14px;font-weight:800;color:#ffffff;">${brand.name}</span>`;
     }
-    return `<img src="${brand.logo.value}" alt="${brand.name}" width="120" style="display:block;margin:0 auto 8px;max-width:120px;height:auto;" border="0">`;
+    return `<img src="${logoUrl}" alt="${brand.name}" width="120" style="display:block;margin:0 auto 8px;max-width:120px;height:auto;" border="0">`;
   }
 
   const parts = brand.logo.value.split('|');
@@ -247,7 +280,7 @@ function renderDivider(show: boolean | undefined): string {
 /**
  * Render the CTA button with VML fallback for Outlook
  */
-function renderCTA(text: string, url: string, bgColor: string, fieldName: 'ctaText' | 'secondaryCtaText' = 'ctaText'): string {
+function renderCTA(text: string, url: string, bgColor: string, fieldName: 'ctaText' | 'secondaryCtaText' | string = 'ctaText'): string {
   if (!text || !url) return '';
   
   return `
@@ -266,6 +299,282 @@ function renderCTA(text: string, url: string, bgColor: string, fieldName: 'ctaTe
   </td>
   </tr>
   </table>`;
+}
+
+// ===== Canvas Block Renderer =====
+
+/**
+ * Render a single modular canvas block into email-compatible HTML.
+ * Each block gets a data-editor-field attribute for interactive click-to-edit.
+ */
+function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number, emailWidth: number): string {
+  const accent = brand.colors.accent;
+  const primary = brand.colors.primary;
+  const headingFont = brand.fonts.heading || 'Montserrat';
+  const bodyFont = brand.fonts.body || 'Montserrat';
+  const headerBg = brand.colors.headerBg || primary;
+  const footerBg = brand.colors.footerBg || primary;
+  const prefix = `block-${index}`;
+
+  switch (block.type) {
+    case 'header': {
+      const logoHtml = renderLogo(brand, headerBg);
+      const isImgLogo = brand.logo.type === 'image';
+      return `
+<!-- ====== BLOCK ${index}: HEADER ====== -->
+<tr>
+<td class="header-cell" data-editor-field="${prefix}" style="background-color:${headerBg};padding:26px 32px;text-align:center;" bgcolor="${headerBg}">
+  ${isImgLogo ? logoHtml : `<p class="header-logo-text" style="margin:0;font-family:${bodyFont},Geneva,sans-serif;font-size:26px;font-weight:700;">${logoHtml}</p>`}
+</td>
+</tr>
+<!-- GRADIENT BAR -->
+<tr>
+<td style="height:4px;background-color:${accent};background-image:linear-gradient(90deg,${brand.colors.gradientStart},${brand.colors.gradientEnd});line-height:4px;font-size:0;">&nbsp;</td>
+</tr>`;
+    }
+
+    case 'hero': {
+      return renderHero({ imageUrl: block.imageUrl, alt: block.alt, href: block.href, fullBleed: block.fullBleed })
+        .replace('data-editor-field="hero"', `data-editor-field="${prefix}-imageUrl"`);
+    }
+
+    case 'text': {
+      const parts: string[] = [];
+      if (block.label) {
+        parts.push(`<p data-editor-field="${prefix}-label" style="margin:0 0 6px;font-family:${bodyFont},Geneva,sans-serif;font-size:13px;color:${accent};font-weight:800;letter-spacing:1.5px;text-transform:uppercase;">${block.label}</p>`);
+      }
+      if (block.headline) {
+        parts.push(`<h1 data-editor-field="${prefix}-headline" class="email-headline" style="margin:0 0 16px;font-family:'${headingFont}','Open Sans',Arial,sans-serif;color:${primary};font-size:26px;font-weight:800;line-height:1.25;">${block.headline}</h1>`);
+      }
+      if (block.body) {
+        parts.push(`<p data-editor-field="${prefix}-body" class="email-body-text" style="margin:0 0 18px;font-family:${bodyFont},Geneva,sans-serif;font-size:16px;line-height:1.6;color:#4a5568;">${block.body}</p>`);
+      }
+      if (!parts.length) return '';
+      return `
+<!-- ====== BLOCK ${index}: TEXT ====== -->
+<tr>
+<td class="email-body-cell" style="padding:24px 32px 16px;">
+  ${parts.join('\n  ')}
+</td>
+</tr>`;
+    }
+
+    case 'image-text': {
+      const html = renderImageTextBlock(
+        { imageUrl: block.imageUrl, alt: block.alt, title: block.title, text: block.text, imagePosition: block.imagePosition },
+        brand
+      );
+      if (!html) return '';
+      return `
+<!-- ====== BLOCK ${index}: IMAGE-TEXT ====== -->
+<tr>
+<td style="padding:8px 32px;" data-editor-field="${prefix}">
+  ${html}
+</td>
+</tr>`;
+    }
+
+    case 'gallery': {
+      const html = renderGallery({ images: block.images, columns: block.columns, caption: block.caption }, brand);
+      if (!html) return '';
+      return `
+<!-- ====== BLOCK ${index}: GALLERY ====== -->
+<tr>
+<td style="padding:8px 32px;" data-editor-field="${prefix}">
+  ${html}
+</td>
+</tr>`;
+    }
+
+    case 'bullets': {
+      const bulletsHtml = renderBullets(block.bullets || [], accent);
+      if (!bulletsHtml && !block.bulletsTitle) return '';
+      return `
+<!-- ====== BLOCK ${index}: BULLETS ====== -->
+<tr>
+<td style="padding:8px 32px;" data-editor-field="${prefix}">
+  ${block.bulletsTitle ? `<p style="margin:0 0 10px;font-family:${bodyFont},Geneva,sans-serif;font-size:16px;color:${primary};font-weight:800;">${block.bulletsTitle}</p>` : ''}
+  ${bulletsHtml}
+</td>
+</tr>`;
+    }
+
+    case 'infobox': {
+      if (!block.eventDate && !block.eventTime) return '';
+      const infoBoxBg = lightenColor(accent, 85);
+      return `
+<!-- ====== BLOCK ${index}: INFOBOX ====== -->
+<tr>
+<td style="padding:8px 32px;" data-editor-field="${prefix}">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${infoBoxBg};border:2px solid ${accent}33;border-radius:12px;">
+  <tr>
+  <td class="info-box-cell" style="padding:20px 24px;text-align:center;">
+    ${block.eventDate ? `<p style="margin:0 0 4px;font-family:${bodyFont},Geneva,sans-serif;font-size:16px;color:${primary};font-weight:800;">📅 ${block.eventDate}</p>` : ''}
+    ${block.eventTime ? `<p style="margin:0;font-family:${bodyFont},Geneva,sans-serif;font-size:16px;color:${accent};font-weight:700;">${block.eventTime}</p>` : ''}
+  </td>
+  </tr>
+  </table>
+</td>
+</tr>`;
+    }
+
+    case 'quote': {
+      const html = renderQuote({ text: block.text, author: block.author, role: block.role }, brand);
+      if (!html) return '';
+      return `
+<!-- ====== BLOCK ${index}: QUOTE ====== -->
+<tr>
+<td style="padding:8px 32px;" data-editor-field="${prefix}">
+  ${html}
+</td>
+</tr>`;
+    }
+
+    case 'cta': {
+      const ctaMain = renderCTA(block.ctaText, block.ctaUrl, accent, `${prefix}-ctaText`);
+      const ctaSec = block.secondaryCtaText && block.secondaryCtaUrl
+        ? renderCTA(block.secondaryCtaText, block.secondaryCtaUrl, primary, `${prefix}-secondaryCtaText`)
+        : '';
+      const preCta = block.preCta
+        ? `<p data-editor-field="${prefix}-preCta" class="pre-cta-text" style="margin:0 0 16px;font-family:${bodyFont},Geneva,sans-serif;font-size:16px;text-align:center;color:${primary};font-weight:700;">${block.preCta}</p>`
+        : '';
+      return `
+<!-- ====== BLOCK ${index}: CTA ====== -->
+<tr>
+<td style="padding:8px 32px;" data-editor-field="${prefix}">
+  ${preCta}
+  ${ctaMain}
+  ${ctaSec}
+</td>
+</tr>`;
+    }
+
+    case 'divider': {
+      return `
+<!-- ====== BLOCK ${index}: DIVIDER ====== -->
+<tr>
+<td style="padding:0 32px;" data-editor-field="${prefix}">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px solid #e5eaf0;font-size:0;line-height:0;padding-top:20px;">&nbsp;</td></tr></table>
+</td>
+</tr>`;
+    }
+
+    case 'spacer': {
+      const h = block.height || 20;
+      return `
+<!-- ====== BLOCK ${index}: SPACER ====== -->
+<tr>
+<td style="height:${h}px;font-size:0;line-height:0;" data-editor-field="${prefix}">&nbsp;</td>
+</tr>`;
+    }
+
+    case 'footer': {
+      const disclaimerBg = darkenColor(footerBg, 8);
+      const ftLogoHtml = renderFooterLogo(brand, footerBg);
+      return `
+<!-- ====== BLOCK ${index}: FOOTER ====== -->
+<tr>
+<td class="footer-cell" style="background:${footerBg};padding:22px 32px;text-align:center;" data-editor-field="${prefix}">
+  ${brand.footer.tagline ? `<p class="footer-tagline" style="margin:0 0 4px;font-family:${bodyFont},Geneva,sans-serif;font-size:16px;color:#ffffff;font-weight:700;">${brand.footer.tagline}</p>` : ''}
+  <p class="footer-subtitle" style="margin:0;font-family:${bodyFont},Geneva,sans-serif;font-size:14px;">
+    ${ftLogoHtml}
+    ${brand.footer.subtitle ? `<span style="color:#8ba0b8;"> · ${brand.footer.subtitle}</span>` : ''}
+  </p>
+  ${block.footerNote ? `<p class="footer-note-text" style="margin:8px 0 0;font-family:${bodyFont},Geneva,sans-serif;font-size:14px;text-align:center;color:#9aa6b2;">${block.footerNote}</p>` : ''}
+</td>
+</tr>
+${brand.footer.disclaimer ? `
+<tr>
+<td class="disclaimer-cell" style="background:${disclaimerBg};padding:18px 32px;text-align:center;">
+  <p class="disclaimer-text" style="margin:0;font-family:${bodyFont},Geneva,sans-serif;font-size:12px;line-height:1.6;color:#5f7089;">${brand.footer.disclaimer}</p>
+</td>
+</tr>` : ''}`;
+    }
+
+    default:
+      return '';
+  }
+}
+
+/**
+ * Render email using the canvas blocks array (v2 modular path).
+ */
+function renderCanvasEmail(brand: Brand, content: EmailContent): string {
+  const emailWidth = content.emailWidth || 600;
+  const headingFont = brand.fonts.heading || 'Montserrat';
+  const bodyFont = brand.fonts.body || 'Montserrat';
+  const pageBackground = content.emailBgColor || '#eef2f6';
+  const bodyBackground = content.bodyBgColor || '#ffffff';
+
+  const blocksHtml = (content.blocks || []).map((b, i) => renderCanvasBlock(b, brand, i, emailWidth)).join('\n');
+
+  return `<!DOCTYPE html>
+<html lang="es" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+<title>${content.headline || 'Email'}</title>
+<link href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(headingFont).replace(/%20/g, '+')}:wght@400;700;800&family=${encodeURIComponent(bodyFont).replace(/%20/g, '+')}:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<!--[if mso]>
+<noscript>
+<xml>
+<o:OfficeDocumentSettings>
+<o:AllowPNG/>
+<o:PixelsPerInch>96</o:PixelsPerInch>
+</o:OfficeDocumentSettings>
+</xml>
+</noscript>
+<style>table,td{font-family:Arial,sans-serif!important;}</style>
+<![endif]-->
+<style>
+  body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+  table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+  img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+  body { margin: 0; padding: 0; width: 100% !important; height: 100% !important; }
+  @media only screen and (max-width: ${emailWidth + 20}px) {
+    .email-container { width: 100% !important; max-width: 100% !important; }
+    .email-body-cell { padding: 28px 20px 22px !important; }
+    .email-headline { font-size: 22px !important; line-height: 1.3 !important; }
+    .email-body-text { font-size: 15px !important; }
+    .cta-btn { display: block !important; width: 100% !important; max-width: 100% !important; padding: 16px 20px !important; text-align: center !important; box-sizing: border-box !important; }
+    .info-box-cell { padding: 16px 18px !important; }
+    .footer-cell { padding: 18px 20px !important; }
+    .disclaimer-cell { padding: 14px 20px !important; }
+    .header-cell { padding: 20px !important; }
+    .header-logo-text { font-size: 22px !important; }
+    .stack-column { display: block !important; width: 100% !important; max-width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; }
+    .hero-img { width: 100% !important; max-width: 100% !important; height: auto !important; }
+  }
+  @media (prefers-color-scheme: dark) {
+    .email-bg { background-color: #1a1a2e !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:${pageBackground};font-family:'${headingFont}','Open Sans',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${pageBackground};" class="email-bg" bgcolor="${pageBackground}">
+<tr><td align="center" style="padding:24px 16px;">
+
+<!--[if mso]>
+<table role="presentation" width="${emailWidth}" cellpadding="0" cellspacing="0" border="0" align="center"><tr><td>
+<![endif]-->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" class="email-container" style="width:100%;max-width:${emailWidth}px;background:${bodyBackground};border-radius:16px;overflow:hidden;box-shadow:0 6px 24px rgba(11,42,74,.12);" bgcolor="${bodyBackground}">
+
+${blocksHtml}
+
+</table>
+<!--[if mso]>
+</td></tr></table>
+<![endif]-->
+
+</td></tr>
+</table>
+
+</body>
+</html>`;
 }
 
 // Tokens de estilo por variante de layout — parametrizan el template, no lo duplican
@@ -297,12 +606,22 @@ function layoutTokens(layout: LayoutVariant): LayoutTokens {
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function renderEmail(brand: Brand, content: EmailContent, _options: RenderOptions = {}): string {
+  // V2 canvas mode: when blocks array is present, use modular renderer
+  if (content.blocks && content.blocks.length > 0) {
+    return renderCanvasEmail(brand, content);
+  }
+
   const {
     primary,
     accent,
     gradientStart,
     gradientEnd,
   } = brand.colors;
+  
+  const emailWidth = content.emailWidth || 600;
+
+  const headingFont = brand.fonts.heading || 'Montserrat';
+  const bodyFont = brand.fonts.body || 'Montserrat';
 
   const layout = content.layout || 'classic';
   const V = layoutTokens(layout);
@@ -315,9 +634,9 @@ export function renderEmail(brand: Brand, content: EmailContent, _options: Rende
   const bodyBackground = V.cardSections ? lightenColor(primary, 96) : (content.bodyBgColor || '#ffffff');
   const cardBackground = content.bodyBgColor || '#ffffff';
 
-  const logoHtml = renderLogo(brand);
+  const logoHtml = renderLogo(brand, headerBg);
   const isImageLogo = brand.logo.type === 'image';
-  const footerLogoHtml = renderFooterLogo(brand);
+  const footerLogoHtml = renderFooterLogo(brand, footerBg);
   const bulletsHtml = renderBullets(content.bullets || [], accent);
   const infoBoxHtml = renderInfoBox(content, brand);
   const ctaHtml = renderCTA(content.ctaText, content.ctaUrl, accent, 'ctaText');
@@ -339,6 +658,7 @@ export function renderEmail(brand: Brand, content: EmailContent, _options: Rende
 <meta name="x-apple-disable-message-reformatting">
 <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
 <title>${content.headline || 'Email'}</title>
+<link href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(headingFont).replace(/%20/g, '+')}:wght@400;700;800&family=${encodeURIComponent(bodyFont).replace(/%20/g, '+')}:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <!--[if mso]>
 <noscript>
 <xml>
@@ -358,7 +678,7 @@ export function renderEmail(brand: Brand, content: EmailContent, _options: Rende
   body { margin: 0; padding: 0; width: 100% !important; height: 100% !important; }
 
   /* Responsive */
-  @media only screen and (max-width: 620px) {
+  @media only screen and (max-width: ${emailWidth + 20}px) {
     .email-container {
       width: 100% !important;
       max-width: 100% !important;
@@ -455,9 +775,9 @@ export function renderEmail(brand: Brand, content: EmailContent, _options: Rende
 
 <!-- CONTAINER — fluid with max-width -->
 <!--[if mso]>
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" align="center"><tr><td>
+<table role="presentation" width="${emailWidth}" cellpadding="0" cellspacing="0" border="0" align="center"><tr><td>
 <![endif]-->
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" class="email-container" ${content.textureUrl ? `background="${content.textureUrl}"` : ''} style="width:100%;max-width:600px;background:${bodyBackground};${content.textureUrl ? `background-image:url(${content.textureUrl});background-size:cover;` : ''}border-radius:${V.containerRadius}px;overflow:hidden;${V.flatShadow ? 'border:1px solid #e5eaf0;' : 'box-shadow:0 6px 24px rgba(11,42,74,.12);'}" bgcolor="${bodyBackground}">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" class="email-container" ${content.textureUrl ? `background="${content.textureUrl}"` : ''} style="width:100%;max-width:${emailWidth}px;background:${bodyBackground};${content.textureUrl ? `background-image:url(${content.textureUrl});background-size:cover;` : ''}border-radius:${V.containerRadius}px;overflow:hidden;${V.flatShadow ? 'border:1px solid #e5eaf0;' : 'box-shadow:0 6px 24px rgba(11,42,74,.12);'}" bgcolor="${bodyBackground}">
 
 ${V.heroTop ? heroHtml : ''}
 

@@ -1,11 +1,11 @@
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { NextResponse } from 'next/server';
 import { EmailAsset } from '@/lib/types';
-import { dataPath } from '@/lib/server/storage';
+import { supabase } from '@/lib/server/supabase';
 
 const ALLOWED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+const BUCKET = 'assets';
 
 function sanitizeBrandId(brandId: string): string {
   return brandId.replace(/[^a-zA-Z0-9_-]/g, '');
@@ -23,40 +23,43 @@ function sanitizeFilename(filename: string): string {
   return `${base}${ext}`;
 }
 
-// GET /api/assets?brandId=<id|_shared> — lee el directorio en cada request:
-// soltar archivos en Finder funciona sin sync ni reinicio
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const brandId = sanitizeBrandId(url.searchParams.get('brandId') || '_shared');
-    const dir = dataPath(path.join('assets', brandId));
 
-    let files: string[] = [];
-    try {
-      files = await fs.readdir(dir);
-    } catch {
+    const { data, error } = await supabase
+      .storage
+      .from(BUCKET)
+      .list(brandId, {
+        limit: 100,
+        offset: 0,
+        sortBy: { column: 'created_at', order: 'desc' },
+      });
+
+    if (error) {
+      console.error('Error listing assets from Supabase:', error);
       return NextResponse.json({ assets: [] });
     }
 
     const assets: EmailAsset[] = [];
-    for (const filename of files) {
-      if (!ALLOWED_EXTENSIONS.has(path.extname(filename).toLowerCase())) continue;
-      try {
-        const stat = await fs.stat(path.join(dir, filename));
-        if (!stat.isFile()) continue;
-        assets.push({
-          filename,
-          brandId,
-          url: `/api/assets/${brandId}/${encodeURIComponent(filename)}`,
-          size: stat.size,
-          modifiedAt: stat.mtime.toISOString(),
-        });
-      } catch {
-        // archivo desapareció entre readdir y stat
-      }
+    for (const file of data) {
+      if (file.name === '.emptyFolderPlaceholder') continue;
+      
+      const { data: publicUrlData } = supabase
+        .storage
+        .from(BUCKET)
+        .getPublicUrl(`${brandId}/${file.name}`);
+
+      assets.push({
+        filename: file.name,
+        brandId,
+        url: publicUrlData.publicUrl,
+        size: file.metadata?.size || 0,
+        modifiedAt: file.updated_at || file.created_at || new Date().toISOString(),
+      });
     }
 
-    assets.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
     return NextResponse.json({ assets });
   } catch (error) {
     console.error('Error in assets GET:', error);
@@ -64,7 +67,6 @@ export async function GET(req: Request) {
   }
 }
 
-// POST /api/assets — multipart form-data: file, brandId
 export async function POST(req: Request) {
   try {
     const fd = await req.formData();
@@ -77,35 +79,48 @@ export async function POST(req: Request) {
     if (file.size > MAX_SIZE_BYTES) {
       return NextResponse.json({ error: 'El archivo supera el máximo de 5 MB' }, { status: 400 });
     }
-    const ext = path.extname(file.name).toLowerCase();
+    
+    // Fallback to name if file.name is empty (sometimes happens with blobs)
+    const nameToUse = file.name || 'image.png';
+    const ext = path.extname(nameToUse).toLowerCase() || '.png';
+    
     if (!ALLOWED_EXTENSIONS.has(ext)) {
       return NextResponse.json(
-        { error: 'Formato no soportado. Usa PNG, JPG, GIF o WebP (PNG/JPG recomendado para emails).' },
+        { error: 'Formato no soportado. Usa PNG, JPG, GIF o WebP.' },
         { status: 400 }
       );
     }
 
-    const dir = dataPath(path.join('assets', brandId));
-    await fs.mkdir(dir, { recursive: true });
+    let filename = sanitizeFilename(nameToUse);
+    const base = path.basename(filename, ext);
+    filename = `${base}-${Date.now().toString(36)}${ext}`;
 
-    let filename = sanitizeFilename(file.name);
-    // Evitar colisiones agregando timestamp
-    try {
-      await fs.access(path.join(dir, filename));
-      const base = path.basename(filename, ext);
-      filename = `${base}-${Date.now().toString(36)}${ext}`;
-    } catch {
-      // no existe: se usa el nombre tal cual
+    const filePath = `${brandId}/${filename}`;
+    const arrayBuffer = await file.arrayBuffer();
+
+    const { error } = await supabase
+      .storage
+      .from(BUCKET)
+      .upload(filePath, arrayBuffer, {
+        contentType: file.type,
+        upsert: false
+      });
+
+    if (error) {
+      console.error('Supabase upload error:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await fs.writeFile(path.join(dir, filename), buffer);
+    const { data: publicUrlData } = supabase
+      .storage
+      .from(BUCKET)
+      .getPublicUrl(filePath);
 
     const asset: EmailAsset = {
       filename,
       brandId,
-      url: `/api/assets/${brandId}/${encodeURIComponent(filename)}`,
-      size: buffer.length,
+      url: publicUrlData.publicUrl,
+      size: file.size,
       modifiedAt: new Date().toISOString(),
     };
     return NextResponse.json({ asset }, { status: 201 });

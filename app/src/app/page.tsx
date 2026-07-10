@@ -148,12 +148,7 @@ export default function Dashboard() {
           </div>
 
           {/* Bento Grid */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 24,
-            marginBottom: 24
-          }}>
+          <div className="dashboard-grid">
             
             {/* Bento Item 1: Welcome & Overview (span-2) */}
             <div className="glass-shell" style={{ gridColumn: 'span 2' }}>
@@ -295,7 +290,7 @@ export default function Dashboard() {
                     Ver todas →
                   </Link>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+                <div className="templates-grid">
                   {TEMPLATES.map(t => (
                     <Link
                       key={t.type}

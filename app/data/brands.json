@@ -1,5 +1,34 @@
 [
   {
+    "name": "AD Media Solution",
+    "category": "Marketing",
+    "colors": {
+      "primary": "#0A0D1A",
+      "accent": "#2D79F0",
+      "gradientStart": "#50D5FF",
+      "gradientEnd": "#2D79F0"
+    },
+    "fonts": {
+      "heading": "Montserrat",
+      "body": "Montserrat"
+    },
+    "logo": {
+      "type": "image",
+      "value": "/api/assets/admediasolution/logo.png",
+      "showName": false,
+      "imageWidth": 180
+    },
+    "footer": {
+      "tagline": "AD Media Solution — Growth Marketing & Automation",
+      "subtitle": "Agencia de Growth Marketing",
+      "disclaimer": "Este correo electrónico y cualquier archivo adjunto son confidenciales y para uso exclusivo del destinatario. Si lo has recibido por error, por favor notifícalo al remitente."
+    },
+    "isFavorite": true,
+    "id": "admediasolution",
+    "createdAt": "2026-07-07T10:25:00.000Z",
+    "updatedAt": "2026-07-07T10:25:00.000Z"
+  },
+  {
     "name": "AMO Managements",
     "category": "Crédito",
     "colors": {

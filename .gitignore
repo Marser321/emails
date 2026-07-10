@@ -5,3 +5,6 @@ app/data/settings.json
 app/node_modules/
 app/.next/
 app/tsconfig.tsbuildinfo
+.vercel
+.env*
+app/data/assets

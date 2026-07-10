@@ -1,24 +1,56 @@
-// Store de marcas sobre data/brands.json — port async de la lógica original de lib/brands.ts
 import { Brand, DEFAULT_BRAND } from '@/lib/types';
-import { readJson, writeJson, withFileLock, fileExists, generateId } from './storage';
+import { supabase } from './supabase';
 
-const FILE = 'brands.json';
+function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2, 11);
+}
 
-async function loadBrands(): Promise<Brand[]> {
-  return readJson<Brand[]>(FILE, []);
+// Convert snake_case from DB to camelCase for Brand object
+function mapBrandFromDB(dbBrand: any): Brand {
+  return {
+    id: dbBrand.id,
+    name: dbBrand.name,
+    category: dbBrand.category,
+    colors: dbBrand.colors,
+    fonts: dbBrand.fonts,
+    logo: dbBrand.logo,
+    footer: dbBrand.footer,
+    voice: dbBrand.voice,
+    isFavorite: dbBrand.is_favorite,
+    createdAt: dbBrand.created_at,
+    updatedAt: dbBrand.updated_at,
+  };
 }
 
 export async function getAllBrands(): Promise<Brand[]> {
-  return loadBrands();
+  const { data, error } = await supabase.from('brands').select('*').order('name');
+  if (error) {
+    console.error('Error getting all brands:', error);
+    return [];
+  }
+  return (data || []).map(mapBrandFromDB);
 }
 
 export async function getBrandById(id: string): Promise<Brand | undefined> {
-  const brands = await loadBrands();
-  return brands.find(b => b.id === id);
+  const { data, error } = await supabase.from('brands').select('*').eq('id', id).single();
+  if (error || !data) return undefined;
+  return mapBrandFromDB(data);
 }
 
 export async function searchBrands(query: string, category?: string): Promise<Brand[]> {
-  let brands = await loadBrands();
+  let qb = supabase.from('brands').select('*');
+  
+  if (category && category !== 'Todas') {
+    qb = qb.eq('category', category);
+  }
+
+  const { data, error } = await qb;
+  if (error) {
+    console.error('Error searching brands:', error);
+    return [];
+  }
+
+  let brands = (data || []).map(mapBrandFromDB);
 
   if (query) {
     const q = query.toLowerCase();
@@ -26,10 +58,6 @@ export async function searchBrands(query: string, category?: string): Promise<Br
       b.name.toLowerCase().includes(q) ||
       b.category.toLowerCase().includes(q)
     );
-  }
-
-  if (category && category !== 'Todas') {
-    brands = brands.filter(b => b.category === category);
   }
 
   // Sort: favorites first, then alphabetically
@@ -42,84 +70,123 @@ export async function searchBrands(query: string, category?: string): Promise<Br
 }
 
 export async function createBrand(data: Partial<Brand>): Promise<Brand> {
-  return withFileLock(FILE, async () => {
-    const brands = await loadBrands();
-    const now = new Date().toISOString();
+  const now = new Date().toISOString();
+  const newBrand: Brand = {
+    ...DEFAULT_BRAND,
+    ...data,
+    id: data.id || generateId(),
+    createdAt: now,
+    updatedAt: now,
+  } as Brand;
 
-    const brand: Brand = {
-      ...DEFAULT_BRAND,
-      ...data,
-      // Respeta un id provisto (permite subir assets/logo antes de guardar la marca)
-      id: data.id || generateId(),
-      createdAt: now,
-      updatedAt: now,
-    } as Brand;
-
-    brands.push(brand);
-    await writeJson(FILE, brands);
-    return brand;
+  const { error } = await supabase.from('brands').insert({
+    id: newBrand.id,
+    name: newBrand.name,
+    category: newBrand.category,
+    colors: newBrand.colors,
+    fonts: newBrand.fonts,
+    logo: newBrand.logo,
+    footer: newBrand.footer,
+    voice: newBrand.voice || null,
+    is_favorite: newBrand.isFavorite,
+    created_at: newBrand.createdAt,
+    updated_at: newBrand.updatedAt,
   });
+
+  if (error) {
+    console.error('Error creating brand:', error);
+    throw new Error(error.message);
+  }
+
+  return newBrand;
 }
 
 export async function updateBrand(id: string, data: Partial<Brand>): Promise<Brand | null> {
-  return withFileLock(FILE, async () => {
-    const brands = await loadBrands();
-    const index = brands.findIndex(b => b.id === id);
-    if (index === -1) return null;
+  const now = new Date().toISOString();
+  
+  const updates: any = { updated_at: now };
+  if (data.name !== undefined) updates.name = data.name;
+  if (data.category !== undefined) updates.category = data.category;
+  if (data.colors !== undefined) updates.colors = data.colors;
+  if (data.fonts !== undefined) updates.fonts = data.fonts;
+  if (data.logo !== undefined) updates.logo = data.logo;
+  if (data.footer !== undefined) updates.footer = data.footer;
+  if (data.voice !== undefined) updates.voice = data.voice;
+  if (data.isFavorite !== undefined) updates.is_favorite = data.isFavorite;
 
-    brands[index] = {
-      ...brands[index],
-      ...data,
-      id, // Ensure ID doesn't change
-      updatedAt: new Date().toISOString(),
-    };
+  const { data: updatedData, error } = await supabase
+    .from('brands')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
 
-    await writeJson(FILE, brands);
-    return brands[index];
-  });
+  if (error || !updatedData) {
+    console.error('Error updating brand:', error);
+    return null;
+  }
+
+  return mapBrandFromDB(updatedData);
 }
 
 export async function deleteBrand(id: string): Promise<boolean> {
-  return withFileLock(FILE, async () => {
-    const brands = await loadBrands();
-    const filtered = brands.filter(b => b.id !== id);
-    if (filtered.length === brands.length) return false;
-    await writeJson(FILE, filtered);
-    return true;
-  });
+  const { error } = await supabase.from('brands').delete().eq('id', id);
+  if (error) {
+    console.error('Error deleting brand:', error);
+    return false;
+  }
+  return true;
 }
 
 export async function importBrands(imported: Partial<Brand>[]): Promise<number> {
-  return withFileLock(FILE, async () => {
-    const existing = await loadBrands();
-    const existingNames = new Set(existing.map(b => b.name.toLowerCase()));
-    let count = 0;
+  const existing = await getAllBrands();
+  const existingNames = new Set(existing.map(b => b.name.toLowerCase()));
+  
+  const toInsert = [];
+  const now = new Date().toISOString();
 
-    for (const brand of imported) {
-      if (!brand.name) continue;
-      // Skip duplicates by name
-      if (existingNames.has(brand.name.toLowerCase())) continue;
+  for (const brand of imported) {
+    if (!brand.name) continue;
+    if (existingNames.has(brand.name.toLowerCase())) continue;
 
-      const now = new Date().toISOString();
-      existing.push({
-        ...DEFAULT_BRAND,
-        ...brand,
-        id: brand.id || generateId(),
-        createdAt: now,
-        updatedAt: now,
-      } as Brand);
-      existingNames.add(brand.name.toLowerCase());
-      count++;
-    }
+    const b = {
+      ...DEFAULT_BRAND,
+      ...brand,
+      id: brand.id || generateId(),
+      createdAt: now,
+      updatedAt: now,
+    } as Brand;
+    
+    toInsert.push({
+      id: b.id,
+      name: b.name,
+      category: b.category,
+      colors: b.colors,
+      fonts: b.fonts,
+      logo: b.logo,
+      footer: b.footer,
+      voice: b.voice || null,
+      is_favorite: b.isFavorite,
+      created_at: b.createdAt,
+      updated_at: b.updatedAt,
+    });
+    existingNames.add(b.name.toLowerCase());
+  }
 
-    await writeJson(FILE, existing);
-    return count;
-  });
+  if (toInsert.length === 0) return 0;
+
+  const { error } = await supabase.from('brands').insert(toInsert);
+  if (error) {
+    console.error('Error importing brands:', error);
+    return 0;
+  }
+
+  return toInsert.length;
 }
 
-// Siembra las marcas demo SOLO si brands.json todavía no existe
 export async function seedIfEmpty(): Promise<void> {
-  if (await fileExists(FILE)) return;
+  const { count, error } = await supabase.from('brands').select('*', { count: 'exact', head: true });
+  if (error || count === null || count > 0) return;
 
   const samples: Partial<Brand>[] = [
     {
