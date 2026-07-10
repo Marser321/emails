@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { 
-  Palette, CheckCircle2, AlertTriangle, X, Sparkles, Image as ImageIcon, 
-  Download, RefreshCw, Check, Eye, Sliders, Type, Layers 
+import {
+  Palette, CheckCircle2, AlertTriangle, X, Sparkles, Image as ImageIcon,
+  RefreshCw, Check, Eye, Sliders, Type, Layers
 } from 'lucide-react';
 import { Brand, EmailContent } from '@/lib/types';
 import { uploadAsset } from '@/lib/assets';
@@ -202,20 +202,25 @@ export default function VisualDesignHub({
   const [overlayOpacity, setOverlayOpacity] = useState(0.6);
   const [isGeneratingBanner, setIsGeneratingBanner] = useState(false);
 
-  // Sincronizar colores cuando cambia la marca o el contenido
-  useEffect(() => {
+  // Sincronizar colores cuando cambia la marca o el contenido (ajuste durante render,
+  // ver react.dev "adjusting state when a prop changes")
+  const [prevBrand, setPrevBrand] = useState(brand);
+  if (brand !== prevBrand) {
+    setPrevBrand(brand);
     if (brand) {
       setPrimaryColor(brand.colors.primary);
       setAccentColor(brand.colors.accent);
       setGradientStart(brand.colors.gradientStart);
       setGradientEnd(brand.colors.gradientEnd);
     }
-  }, [brand]);
+  }
 
-  useEffect(() => {
+  const [prevContent, setPrevContent] = useState(content);
+  if (content !== prevContent) {
+    setPrevContent(content);
     setEmailBgColor(content.emailBgColor || '#eef2f6');
     setBodyBgColor(content.bodyBgColor || '#ffffff');
-  }, [content]);
+  }
 
   // Contraste calculado en tiempo real
   const contrastPrimaryToBody = getContrastRatio(primaryColor, bodyBgColor);
@@ -339,8 +344,8 @@ export default function VisualDesignHub({
         let line = '';
         let y = 280;
         for (let n = 0; n < words.length; n++) {
-          let testLine = line + words[n] + ' ';
-          let metrics = ctx.measureText(testLine);
+          const testLine = line + words[n] + ' ';
+          const metrics = ctx.measureText(testLine);
           if (metrics.width > 900 && n > 0) {
             ctx.fillText(line, 120, y);
             line = words[n] + ' ';

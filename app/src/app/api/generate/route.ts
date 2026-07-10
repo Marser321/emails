@@ -5,7 +5,7 @@ import { getProvider, MissingApiKeyError } from '@/lib/server/ai';
 import { generateRequestSchema, validationMessage } from '@/lib/server/api-schemas';
 import { requireUser, AuthenticationError } from '@/lib/server/auth';
 import { getBrandById } from '@/lib/server/brandStore';
-import { addHistoryEntry, getTopRatedExamples } from '@/lib/server/historyStore';
+import { addHistoryEntry, getRatedExamples } from '@/lib/server/historyStore';
 import type { Brand, EmailContent } from '@/lib/types';
 
 export async function POST(req: Request) {
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     if (!brand) return NextResponse.json({ error: 'Marca no encontrada.' }, { status: 400 });
 
     const provider = await getProvider(input.engine);
-    const examples = await getTopRatedExamples(brand.id, 3);
+    const examples = await getRatedExamples(brand.id, 3, 2);
     const content = await provider.generate({ prompt: input.prompt, templateType: input.templateType, brand, examples }) as EmailContent;
     content.subject ||= content.headline;
     content.preheader ||= content.body?.replace(/\s+/g, ' ').slice(0, 110);

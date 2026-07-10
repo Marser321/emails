@@ -133,7 +133,7 @@ export const generateRequestSchema = z.object({
 
 export const refineRequestSchema = z.object({
   text: z.string().trim().min(1).max(10000), field: z.string().trim().min(1).max(80),
-  command: z.enum(['optimize', 'shorten', 'casual', 'formal']).default('optimize'), engine: engineSchema.optional(),
+  command: z.enum(['optimize', 'shorten', 'casual', 'formal', 'rewrite']).default('optimize'), engine: engineSchema.optional(),
   brandId: z.string().trim().max(128).optional(),
 }).strict();
 

@@ -156,3 +156,12 @@ export async function getHistoryEntry(brandId: string, id: string): Promise<Emai
 export async function getTopRatedExamples(brandId: string, count: number): Promise<EmailHistoryEntry[]> {
   return (await listHistory(brandId)).filter(entry => entry.rating === 'up').slice(0, count);
 }
+
+// Ejemplos calificados para few-shot: los 👍 se imitan, los 👎 se inyectan como anti-ejemplos
+export async function getRatedExamples(brandId: string, upCount: number, downCount: number): Promise<EmailHistoryEntry[]> {
+  const all = await listHistory(brandId);
+  return [
+    ...all.filter(entry => entry.rating === 'up').slice(0, upCount),
+    ...all.filter(entry => entry.rating === 'down').slice(0, downCount),
+  ];
+}

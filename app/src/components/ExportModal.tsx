@@ -9,6 +9,8 @@ interface ExportModalProps {
   fileName: string;
   mode: 'copy' | 'download';
   initialBaseUrl: string;
+  /** Base pública del bucket de Supabase Storage, detectada por el servidor. */
+  autoBaseUrl?: string;
   onClose: () => void;
   onDone: (message: string) => void;
   onBaseUrlSaved?: (baseUrl: string) => void;
@@ -39,7 +41,7 @@ function downloadText(text: string, fileName: string) {
 
 // Aparece SOLO cuando el HTML contiene imágenes locales (/api/assets/...):
 // esas URLs no funcionan fuera de esta máquina y hay que decidir cómo exportarlas.
-export default function ExportModal({ html, fileName, mode, initialBaseUrl, onClose, onDone, onBaseUrlSaved }: ExportModalProps) {
+export default function ExportModal({ html, fileName, mode, initialBaseUrl, autoBaseUrl, onClose, onDone, onBaseUrlSaved }: ExportModalProps) {
   const [baseUrl, setBaseUrl] = useState(initialBaseUrl);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,12 +61,14 @@ export default function ExportModal({ html, fileName, mode, initialBaseUrl, onCl
     setError(null);
     try {
       const clean = baseUrl.trim();
-      // Persistir la base para la próxima vez
-      fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assetsPublicBaseUrl: clean }),
-      }).then(() => onBaseUrlSaved?.(clean)).catch(() => {});
+      // Persistir la base para la próxima vez (la de Supabase se detecta sola, no hace falta guardarla)
+      if (clean !== autoBaseUrl) {
+        fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assetsPublicBaseUrl: clean }),
+        }).then(() => onBaseUrlSaved?.(clean)).catch(() => {});
+      }
 
       const rewritten = rewriteAssetUrls(html, clean);
       if (mode === 'copy') {
@@ -161,7 +165,11 @@ export default function ExportModal({ html, fileName, mode, initialBaseUrl, onCl
                   <Globe2 size={15} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 6 }} /> Reescribir a URL pública <span className="badge badge-accent" style={{ fontSize: 9, padding: '2px 6px', marginLeft: 6 }}>Recomendado</span>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.5 }}>
-                  Sube la carpeta <code>data/assets/</code> a tu hosting/CDN o a la media library de tu plataforma de envío, y las rutas se reescriben. Funciona en todos los clientes de correo.
+                  {autoBaseUrl && baseUrl === autoBaseUrl ? (
+                    <>💡 Tus imágenes ya viven en <strong>Supabase Storage</strong> — esta URL pública se detectó automáticamente. Solo hacé clic en {mode === 'copy' ? 'Copiar' : 'Descargar'}.</>
+                  ) : (
+                    <>Sube la carpeta <code>data/assets/</code> a tu hosting/CDN o a la media library de tu plataforma de envío, y las rutas se reescriben. Funciona en todos los clientes de correo.</>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
@@ -176,6 +184,16 @@ export default function ExportModal({ html, fileName, mode, initialBaseUrl, onCl
                     {busy === 'public' ? <LoaderCircle size={15} className="spin" /> : mode === 'copy' ? 'Copiar' : 'Descargar'}
                   </button>
                 </div>
+                {autoBaseUrl && baseUrl !== autoBaseUrl && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setBaseUrl(autoBaseUrl)}
+                    style={{ fontSize: 10, marginTop: 6, padding: '2px 6px', height: 'auto' }}
+                  >
+                    ↺ Usar la URL de Supabase Storage detectada
+                  </button>
+                )}
               </div>
             </div>
 

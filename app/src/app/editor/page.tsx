@@ -9,6 +9,7 @@ import VisualDesignHub from '@/components/VisualDesignHub';
 import ExportModal from '@/components/ExportModal';
 import { getAllBrands, updateBrand } from '@/lib/brands';
 import { collectLocalAssetUrls } from '@/lib/export';
+import { analyzeEmailHtml, listEmailIssues } from '@/lib/email-checks';
 import { renderEmail } from '@/lib/templates';
 import { AIEngine, Brand, Draft, EmailContent, LayoutVariant, TemplateType, TEMPLATES } from '@/lib/types';
 import { Palette } from 'lucide-react';
@@ -27,6 +28,7 @@ interface PublicSettings {
   anthropicKeyMasked: string;
   defaultEngine: AIEngine;
   assetsPublicBaseUrl: string;
+  supabaseAssetsBaseUrl: string;
 }
 
 const ENGINE_LABELS: Record<AIEngine, string> = {
@@ -65,12 +67,13 @@ const TEXTURE_PRESETS = [
 function EditorContent() {
   const searchParams = useSearchParams();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const mobileIframeRef = useRef<HTMLIFrameElement>(null);
 
   const [brands, setBrands] = useState<Brand[]>([]);
   const [selectedBrandId, setSelectedBrandId] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateType>('masterclass');
   const [content, setContent] = useState<EmailContent>({ ...DEFAULT_CONTENT });
-  const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop');
+  const [viewMode, setViewMode] = useState<'desktop' | 'mobile' | 'split'>('desktop');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [mounted, setMounted] = useState(false);
   const [htmlOutput, setHtmlOutput] = useState('');
@@ -385,12 +388,8 @@ function EditorContent() {
     const html = generateHtml();
     setHtmlOutput(html);
 
-    if (iframeRef.current) {
-      const doc = iframeRef.current.contentDocument;
-      if (doc) {
-        doc.open();
-        // Inject click listener into iframe
-        let interactiveHtml = html + `
+    // Inject click listener into iframe
+    let interactiveHtml = html + `
           <script>
             document.addEventListener('click', function(e) {
               let target = e.target;
@@ -453,17 +452,23 @@ function EditorContent() {
           `);
         }
 
-        doc.write(interactiveHtml);
-        doc.close();
-        // Auto-resize iframe
-        setTimeout(() => {
-          if (iframeRef.current && doc.body) {
-            iframeRef.current.style.height = Math.max(400, doc.body.scrollHeight + 20) + 'px';
-          }
-        }, 100);
-      }
-    }
-  }, [mounted, generateHtml, simulatedDarkMode]);
+    const writeTo = (frame: HTMLIFrameElement | null) => {
+      if (!frame) return;
+      const doc = frame.contentDocument;
+      if (!doc) return;
+      doc.open();
+      doc.write(interactiveHtml);
+      doc.close();
+      // Auto-resize iframe
+      setTimeout(() => {
+        if (doc.body) {
+          frame.style.height = Math.max(400, doc.body.scrollHeight + 20) + 'px';
+        }
+      }, 100);
+    };
+    writeTo(iframeRef.current);
+    writeTo(mobileIframeRef.current);
+  }, [mounted, generateHtml, simulatedDarkMode, viewMode]);
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -920,6 +925,14 @@ function EditorContent() {
                   onMouseDown={() => handleRefineField(field, 'formal', index)}
                 >
                   👔 Tono Formal
+                </button>
+                <button
+                  type="button"
+                  className="sidebar-link"
+                  style={{ padding: '6px 8px', fontSize: 11, borderRadius: 'var(--radius-sm)', width: '100%', textAlign: 'left' }}
+                  onMouseDown={() => handleRefineField(field, 'rewrite', index)}
+                >
+                  🎲 Reescribir (otro ángulo)
                 </button>
               </div>
             </div>
@@ -1899,6 +1912,11 @@ function EditorContent() {
                             const isCtaValid = content.ctaUrl && content.ctaUrl !== '#' && content.ctaText.trim().length > 0;
                             const hasPersonalization = content.body.includes('{{contact.first_name}}');
 
+                            // Chequeos sobre el HTML final: peso (Gmail recorta ~102KB), imágenes y links
+                            const htmlChecks = analyzeEmailHtml(htmlOutput);
+                            const htmlIssues = listEmailIssues(htmlChecks);
+                            const clipColor = htmlChecks.gmailClip === 'ok' ? '#34d399' : htmlChecks.gmailClip === 'warning' ? '#fbbf24' : '#f87171';
+
                             return (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
                                 {/* Reading time */}
@@ -1940,6 +1958,33 @@ function EditorContent() {
                                   {spamMatches.length > 0 && (
                                     <div style={{ fontSize: 11, color: 'var(--text-muted)', background: 'rgba(239, 68, 68, 0.05)', padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239, 68, 68, 0.1)', marginTop: 4 }}>
                                       Evita: {spamMatches.join(', ')} para mejorar entregabilidad.
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Chequeos del HTML final */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, borderTop: '1px solid var(--border-subtle)', paddingTop: 8, marginTop: 4 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>📦 Peso del HTML:</span>
+                                    <span style={{ color: clipColor, fontWeight: 600 }}>
+                                      {htmlChecks.weightKB} KB {htmlChecks.gmailClip === 'ok' ? '🟢' : htmlChecks.gmailClip === 'warning' ? '🟡 cerca del límite' : '🔴 Gmail lo recorta'}
+                                    </span>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>🖼️ Imágenes:</span>
+                                    <span style={{ color: htmlChecks.images.missingAlt > 0 ? '#fbbf24' : '#34d399', fontWeight: 600 }}>
+                                      {htmlChecks.images.total} en total{htmlChecks.images.missingAlt > 0 ? ` · ${htmlChecks.images.missingAlt} sin alt` : ' · alt OK'}
+                                    </span>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>🔗 Enlaces:</span>
+                                    <span style={{ color: htmlChecks.links.empty > 0 ? '#f87171' : '#34d399', fontWeight: 600 }}>
+                                      {htmlChecks.links.total} en total{htmlChecks.links.empty > 0 ? ` · ${htmlChecks.links.empty} sin destino` : ' · destinos OK'}
+                                    </span>
+                                  </div>
+                                  {htmlIssues.length > 0 && (
+                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', background: 'rgba(251, 191, 36, 0.05)', padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(251, 191, 36, 0.15)' }}>
+                                      {htmlIssues.map(issue => <div key={issue}>• {issue}</div>)}
                                     </div>
                                   )}
                                 </div>
@@ -2137,6 +2182,24 @@ function EditorContent() {
                       >
                         📱 Mobile
                       </button>
+                      <button
+                        className={viewMode === 'split' ? 'active' : ''}
+                        onClick={() => setViewMode('split')}
+                        title="Ver desktop y mobile lado a lado"
+                        style={{
+                          padding: '6px 16px',
+                          border: 'none',
+                          borderRadius: '100px',
+                          background: viewMode === 'split' ? 'var(--accent-gradient)' : 'transparent',
+                          color: viewMode === 'split' ? '#ffffff' : 'var(--text-secondary)',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          transition: 'all var(--transition-fast)',
+                        }}
+                      >
+                        ⬛⬜ Ambos
+                      </button>
                     </div>
 
                     {/* Undo / Redo */}
@@ -2270,26 +2333,51 @@ function EditorContent() {
                   display: 'flex',
                   alignItems: 'flex-start',
                   justifyContent: 'center',
+                  gap: 24,
                   padding: 24,
                   background: 'rgba(5, 5, 10, 0.4)',
                   overflowY: 'auto',
+                  overflowX: viewMode === 'split' ? 'auto' : undefined,
                   borderTop: 'none',
                   minHeight: 500
                 }}>
-                  <iframe
-                    ref={iframeRef}
-                    title="Email Preview"
-                    sandbox="allow-same-origin"
-                    style={{
-                      width: viewMode === 'desktop' ? previewWidth : 390,
-                      maxWidth: '100%',
-                      borderRadius: 'var(--radius-md)',
-                      boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-                      border: '1px solid rgba(255,255,255,0.05)',
-                      background: '#ffffff',
-                      transition: 'width 100ms ease, height var(--transition-base)',
-                    }}
-                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                    {viewMode === 'split' && (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>🖥️ Desktop · 600px</span>
+                    )}
+                    <iframe
+                      ref={iframeRef}
+                      title="Email Preview"
+                      sandbox="allow-same-origin"
+                      style={{
+                        width: viewMode === 'mobile' ? 390 : viewMode === 'split' ? 600 : previewWidth,
+                        maxWidth: viewMode === 'split' ? undefined : '100%',
+                        borderRadius: 'var(--radius-md)',
+                        boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                        border: '1px solid rgba(255,255,255,0.05)',
+                        background: '#ffffff',
+                        transition: 'width 100ms ease, height var(--transition-base)',
+                      }}
+                    />
+                  </div>
+                  {viewMode === 'split' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>📱 Mobile · 390px</span>
+                      <iframe
+                        ref={mobileIframeRef}
+                        title="Email Preview Mobile"
+                        sandbox="allow-same-origin"
+                        style={{
+                          width: 390,
+                          borderRadius: 'var(--radius-md)',
+                          boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                          border: '1px solid rgba(255,255,255,0.05)',
+                          background: '#ffffff',
+                          transition: 'height var(--transition-base)',
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2494,7 +2582,8 @@ function EditorContent() {
             html={htmlOutput}
             fileName={exportFileName()}
             mode={exportMode}
-            initialBaseUrl={settings?.assetsPublicBaseUrl || ''}
+            initialBaseUrl={settings?.assetsPublicBaseUrl || settings?.supabaseAssetsBaseUrl || ''}
+            autoBaseUrl={settings?.supabaseAssetsBaseUrl || ''}
             onClose={() => setExportMode(null)}
             onDone={message => {
               showToast(message);

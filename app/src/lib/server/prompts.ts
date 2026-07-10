@@ -23,26 +23,51 @@ export function buildVoiceBlock(brand: Brand): string {
   return lines.join('\n');
 }
 
-// Bloque few-shot — emails con rating 👍 de esta marca (aprendizaje del estilo real usado)
+// Bloque few-shot — emails con rating 👍 se imitan; los 👎 se muestran como anti-ejemplos.
+// Acepta la lista mixta de getRatedExamples (o solo 👍 de getTopRatedExamples).
 export function buildExamplesBlock(examples: EmailHistoryEntry[]): string {
   if (!examples.length) return '';
-  const parts: string[] = [
-    '\n## Ejemplos de emails aprobados por el usuario para esta marca',
-    'Imita su ESTILO y tono, NO su contenido:',
-  ];
-  examples.slice(0, 3).forEach((e, i) => {
-    const c = e.content;
-    const sample = {
-      label: c.label,
-      headline: c.headline,
-      body: truncate(c.body, 600),
-      bullets: c.bullets?.filter(Boolean),
-      ctaText: c.ctaText,
-      preCta: c.preCta,
-    };
-    parts.push(`### Ejemplo ${i + 1} — instrucción original: "${truncate(e.prompt, 200)}"`);
-    parts.push(JSON.stringify(sample, null, 2));
-  });
+  const parts: string[] = [];
+
+  const approved = examples.filter(e => e.rating !== 'down');
+  if (approved.length) {
+    parts.push(
+      '\n## Ejemplos de emails aprobados por el usuario para esta marca',
+      'Imita su ESTILO y tono, NO su contenido:',
+    );
+    approved.slice(0, 3).forEach((e, i) => {
+      const c = e.content;
+      const sample = {
+        label: c.label,
+        headline: c.headline,
+        body: truncate(c.body, 600),
+        bullets: c.bullets?.filter(Boolean),
+        ctaText: c.ctaText,
+        preCta: c.preCta,
+      };
+      parts.push(`### Ejemplo ${i + 1} — instrucción original: "${truncate(e.prompt, 200)}"`);
+      parts.push(JSON.stringify(sample, null, 2));
+    });
+  }
+
+  const rejected = examples.filter(e => e.rating === 'down');
+  if (rejected.length) {
+    parts.push(
+      '\n## Ejemplos RECHAZADOS por el usuario para esta marca',
+      'NO repitas el estilo, tono ni las fórmulas de estos ejemplos:',
+    );
+    rejected.slice(0, 2).forEach((e, i) => {
+      const c = e.content;
+      const sample = {
+        headline: c.headline,
+        body: truncate(c.body, 300),
+        ctaText: c.ctaText,
+      };
+      parts.push(`### Rechazado ${i + 1}`);
+      parts.push(JSON.stringify(sample, null, 2));
+    });
+  }
+
   return parts.join('\n');
 }
 
@@ -99,6 +124,8 @@ export function refineCommandPrompt(command: string): string {
       return 'Cambia el tono a un estilo informal, cercano, empático y de tú a tú en español neutral. Como si le hablaras a un amigo pero manteniendo el propósito de marketing.';
     case 'formal':
       return 'Cambia el tono a un estilo formal, corporativo y profesional en español neutral.';
+    case 'rewrite':
+      return 'Reescribe este texto desde cero con un ángulo o gancho DISTINTO al original (otro beneficio, otra emoción, otra estructura), manteniendo el propósito de marketing y la longitud aproximada. No parafrasees: proponé una versión alternativa real, en español neutral.';
     default:
       return 'Optimiza este texto para email marketing en español.';
   }

@@ -22,7 +22,8 @@ data/                     # ← LA BASE DE DATOS (respaldable, editable, version
 2. Editar a gusto → **Copiar HTML** (el snapshot final se guarda en el historial).
 3. Calificar con 👍/👎 en la toolbar del preview (o en el dashboard).
 4. Los emails con 👍 se inyectan como ejemplos few-shot en las próximas generaciones
-   de esa marca, junto con el perfil de voz (`brand.voice`, editable en el modal de marca).
+   de esa marca (y los 👎 como anti-ejemplos que la IA debe evitar), junto con el
+   perfil de voz (`brand.voice`, editable en el modal de marca).
 
 Cuanto más se usa y califica, mejor escribe la IA para cada marca.
 
@@ -36,10 +37,16 @@ Cuanto más se usa y califica, mejor escribe la IA para cada marca.
 
 ## Imágenes en los emails
 
-Las imágenes locales se sirven en `/api/assets/<brandId>/<archivo>` (solo funcionan
-en esta máquina). Al copiar/descargar un HTML que las usa, la app ofrece:
-reescribir a una URL pública (recomendado — subir `data/assets/` al hosting/CDN),
-descargar ZIP (html + imágenes), o embeber base64 (solo archivo; Gmail/Outlook lo bloquean).
+Las imágenes se suben a **Supabase Storage** (bucket `assets`) vía `POST /api/assets`;
+la ruta legacy `/api/assets/<brandId>/<archivo>` redirige (307) a la URL pública del bucket.
+Al copiar/descargar un HTML que usa rutas locales, la app ofrece: reescribir a URL pública
+(recomendado — el modal autodetecta la base de Supabase Storage desde `/api/settings`,
+un clic y listo), descargar ZIP (html + imágenes), o embeber base64 (solo archivo;
+Gmail/Outlook lo bloquean).
+
+En el editor, la sección **🩺 Salud & Métricas** chequea el HTML final antes de exportar:
+peso (Gmail recorta >~102 KB), imágenes sin alt, imágenes locales y enlaces sin destino
+(`app/src/lib/email-checks.ts`).
 
 ## Notas técnicas
 

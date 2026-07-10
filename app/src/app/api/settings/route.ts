@@ -2,7 +2,15 @@ import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { settingsPatchSchema, validationMessage } from '@/lib/server/api-schemas';
 import { requireUser, AuthenticationError } from '@/lib/server/auth';
+import { getSupabasePublicConfig } from '@/lib/server/env';
 import { getSettings, saveSettings } from '@/lib/server/settingsStore';
+
+// Base pública del bucket de assets — los /api/assets/<brand>/<file> del HTML
+// se pueden reescribir a esta URL sin subir nada a un CDN aparte.
+function supabaseAssetsBaseUrl(): string {
+  const config = getSupabasePublicConfig();
+  return config ? `${config.url.replace(/\/+$/, '')}/storage/v1/object/public/assets` : '';
+}
 
 async function publicSettings() {
   const settings = await getSettings();
@@ -11,6 +19,7 @@ async function publicSettings() {
     hasAnthropicKey: Boolean(process.env.ANTHROPIC_API_KEY),
     defaultEngine: settings.defaultEngine,
     assetsPublicBaseUrl: settings.assetsPublicBaseUrl || '',
+    supabaseAssetsBaseUrl: supabaseAssetsBaseUrl(),
   };
 }
 
