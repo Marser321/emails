@@ -26,8 +26,6 @@ const LAYOUT_OPTIONS: { id: LayoutVariant; name: string; icon: string; descripti
 interface PublicSettings {
   hasGeminiKey: boolean;
   hasAnthropicKey: boolean;
-  geminiKeyMasked: string;
-  anthropicKeyMasked: string;
   defaultEngine: AIEngine;
   assetsPublicBaseUrl: string;
   supabaseAssetsBaseUrl: string;
@@ -79,6 +77,13 @@ function EditorContent() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [mounted, setMounted] = useState(false);
   const [htmlOutput, setHtmlOutput] = useState('');
+  // Confirmación visual EN EL BOTÓN (además del toast): más confiable que un
+  // toast fijo en una esquina cuando la app corre embebida en un iframe de GHL.
+  const [actionFeedback, setActionFeedback] = useState<Record<string, boolean>>({});
+  const flashFeedback = useCallback((key: string) => {
+    setActionFeedback(prev => ({ ...prev, [key]: true }));
+    setTimeout(() => setActionFeedback(prev => ({ ...prev, [key]: false })), 1800);
+  }, []);
 
   // AI states
   const [apiKeyModalOpen, setApiKeyModalOpen] = useState(false);
@@ -86,10 +91,7 @@ function EditorContent() {
   const [aiPrompt, setAiPrompt] = useState('');
   const [generatingCopy, setGeneratingCopy] = useState(false);
   const [settings, setSettings] = useState<PublicSettings | null>(null);
-  const [geminiKeyInput, setGeminiKeyInput] = useState('');
-  const [anthropicKeyInput, setAnthropicKeyInput] = useState('');
   const [selectedEngine, setSelectedEngine] = useState<AIEngine>('gemini');
-  const [savingSettings, setSavingSettings] = useState(false);
   // Última generación: para rating 👍/👎 y snapshot del HTML usado
   const [lastHistory, setLastHistory] = useState<{ id: string; brandId: string; rating: 'up' | 'down' | null } | null>(null);
 
@@ -566,6 +568,7 @@ function EditorContent() {
       document.body.removeChild(ta);
       showToast('📋 HTML copiado');
     }
+    flashFeedback('copyHtml');
     // El HTML copiado es "lo realmente usado" — actualiza el snapshot del historial
     syncHistorySnapshot();
   };
@@ -644,31 +647,6 @@ function EditorContent() {
       setApiKeyModalOpen(true);
     } else {
       setAiPromptModalOpen(true);
-    }
-  };
-
-  const handleSaveSettings = async (extra?: { defaultEngine?: AIEngine }) => {
-    setSavingSettings(true);
-    try {
-      const body: Record<string, string> = {};
-      if (geminiKeyInput.trim()) body.geminiApiKey = geminiKeyInput.trim();
-      if (anthropicKeyInput.trim()) body.anthropicApiKey = anthropicKeyInput.trim();
-      if (extra?.defaultEngine) body.defaultEngine = extra.defaultEngine;
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error('Error al guardar la configuración');
-      const updated: PublicSettings = await res.json();
-      setSettings(updated);
-      setGeminiKeyInput('');
-      setAnthropicKeyInput('');
-      showToast('🔑 Configuración de IA guardada');
-    } catch (err) {
-      showToast((err instanceof Error ? err.message : null) || 'Error al guardar la configuración', 'error');
-    } finally {
-      setSavingSettings(false);
     }
   };
 
@@ -895,6 +873,7 @@ function EditorContent() {
     a.click();
     URL.revokeObjectURL(url);
     showToast('📥 Archivo HTML descargado');
+    flashFeedback('download');
     syncHistorySnapshot();
   };
 
@@ -913,6 +892,7 @@ function EditorContent() {
       
       navigator.clipboard.writeText(shareUrl);
       showToast('🔗 Enlace del borrador copiado al portapapeles');
+      flashFeedback('share');
     } catch {
       showToast('❌ Error al generar enlace de compartición', 'error');
     }
@@ -2278,14 +2258,28 @@ function EditorContent() {
                   </div>
 
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <button className="btn btn-primary btn-sm group" onClick={handleCopyHtml} style={{ padding: '6px 12px', height: 32, fontSize: 12 }}>
-                      <span>📋 Copiar HTML</span>
+                    <button
+                      className={`btn btn-sm group action-feedback-btn ${actionFeedback.copyHtml ? 'is-confirmed' : 'btn-primary'}`}
+                      onClick={handleCopyHtml}
+                      style={{ padding: '6px 12px', height: 32, fontSize: 12 }}
+                    >
+                      <span>{actionFeedback.copyHtml ? '✅ ¡Copiado!' : '📋 Copiar HTML'}</span>
                     </button>
-                    <button className="btn btn-secondary btn-sm" onClick={handleDownloadHtml} title="Descargar archivo HTML" style={{ padding: '6px 12px', height: 32, fontSize: 12 }}>
-                      <span>📥 Descargar</span>
+                    <button
+                      className={`btn btn-sm action-feedback-btn ${actionFeedback.download ? 'is-confirmed' : 'btn-secondary'}`}
+                      onClick={handleDownloadHtml}
+                      title="Descargar archivo HTML"
+                      style={{ padding: '6px 12px', height: 32, fontSize: 12 }}
+                    >
+                      <span>{actionFeedback.download ? '✅ ¡Descargado!' : '📥 Descargar'}</span>
                     </button>
-                    <button className="btn btn-secondary btn-sm" onClick={handleShareDraft} title="Copiar enlace del borrador" style={{ padding: '6px 12px', height: 32, fontSize: 12 }}>
-                      <span>🔗 Compartir</span>
+                    <button
+                      className={`btn btn-sm action-feedback-btn ${actionFeedback.share ? 'is-confirmed' : 'btn-secondary'}`}
+                      onClick={handleShareDraft}
+                      title="Copiar enlace del borrador"
+                      style={{ padding: '6px 12px', height: 32, fontSize: 12 }}
+                    >
+                      <span>{actionFeedback.share ? '✅ ¡Enlace copiado!' : '🔗 Compartir'}</span>
                     </button>
                     <button className="btn btn-secondary btn-sm" onClick={handleSendTestEmail} title="Enviar prueba por email" style={{ padding: '6px 12px', height: 32, fontSize: 12 }}>
                       <span>📨 Probar</span>
@@ -2382,98 +2376,58 @@ function EditorContent() {
           </div>
         </div>
 
-        {/* AI SETTINGS MODAL — keys de ambos motores + motor por defecto */}
+        {/* AI SETTINGS MODAL — solo lectura: las keys las carga el admin por variable
+            de entorno (Vercel / .env.local), ya no hay guardado self-service desde acá. */}
         {apiKeyModalOpen && (
           <div className="modal-overlay" onClick={() => setApiKeyModalOpen(false)}>
-            <div className="glass-shell" onClick={e => e.stopPropagation()} style={{ width: 520, maxWidth: '90vw', animation: 'slideUp 0.4s ease-out' }}>
+            <div className="glass-shell" onClick={e => e.stopPropagation()} style={{ width: 480, maxWidth: '90vw', animation: 'slideUp 0.4s ease-out' }}>
               <div className="glass-core" style={{ padding: 24 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 10 }}>
-                  <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>🔑 Configurar IA</h2>
+                  <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>🔑 Estado de la IA</h2>
                   <button className="btn btn-ghost btn-icon" onClick={() => setApiKeyModalOpen(false)} aria-label="Cerrar modal" style={{ width: 30, height: 30 }}>✕</button>
                 </div>
                 <div style={{ marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label htmlFor="gemini-key-input" className="form-label">
-                      ⚡ Gemini API Key{' '}
-                      {settings?.hasGeminiKey && (
-                        <span style={{ color: '#34d399', fontWeight: 400, fontSize: 11 }}>
-                          — configurada ({settings.geminiKeyMasked})
-                        </span>
-                      )}
-                    </label>
-                    <input
-                      id="gemini-key-input"
-                      type="password"
-                      className="form-input"
-                      value={geminiKeyInput}
-                      onChange={e => setGeminiKeyInput(e.target.value)}
-                      placeholder={settings?.hasGeminiKey ? 'Ingresar nueva key para reemplazar…' : 'AIzaSy…'}
-                      spellCheck={false}
-                    />
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                      Gratuita en{' '}
-                      <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer nofollow" style={{ color: 'var(--text-accent)' }}>
-                        Google AI Studio
-                      </a>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>⚡ Gemini</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: settings?.hasGeminiKey ? '#34d399' : '#f87171' }}>
+                        {settings?.hasGeminiKey ? '✅ Configurada' : '❌ No configurada'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>🧠 Claude</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: settings?.hasAnthropicKey ? '#34d399' : '#f87171' }}>
+                        {settings?.hasAnthropicKey ? '✅ Configurada' : '❌ No configurada'}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label htmlFor="anthropic-key-input" className="form-label">
-                      🧠 Anthropic API Key (Claude){' '}
-                      {settings?.hasAnthropicKey && (
-                        <span style={{ color: '#34d399', fontWeight: 400, fontSize: 11 }}>
-                          — configurada ({settings.anthropicKeyMasked})
-                        </span>
-                      )}
-                    </label>
-                    <input
-                      id="anthropic-key-input"
-                      type="password"
-                      className="form-input"
-                      value={anthropicKeyInput}
-                      onChange={e => setAnthropicKeyInput(e.target.value)}
-                      placeholder={settings?.hasAnthropicKey ? 'Ingresar nueva key para reemplazar…' : 'sk-ant-…'}
-                      spellCheck={false}
-                    />
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                      Se obtiene en{' '}
-                      <a href="https://platform.claude.com/" target="_blank" rel="noopener noreferrer nofollow" style={{ color: 'var(--text-accent)' }}>
-                        platform.claude.com
-                      </a>
+                  {(settings?.hasGeminiKey || settings?.hasAnthropicKey) && (
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label">Motor por defecto</label>
+                      <div className="pill-tabs">
+                        {(['gemini', 'claude'] as AIEngine[]).map(engine => (
+                          <button
+                            key={engine}
+                            type="button"
+                            className={`pill-tab ${selectedEngine === engine ? 'active' : ''}`}
+                            onClick={() => handleChangeDefaultEngine(engine)}
+                            disabled={engine === 'gemini' ? !settings?.hasGeminiKey : !settings?.hasAnthropicKey}
+                            style={{ fontSize: 12 }}
+                          >
+                            {ENGINE_LABELS[engine]}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label">Motor por defecto</label>
-                    <div className="pill-tabs">
-                      {(['gemini', 'claude'] as AIEngine[]).map(engine => (
-                        <button
-                          key={engine}
-                          type="button"
-                          className={`pill-tab ${selectedEngine === engine ? 'active' : ''}`}
-                          onClick={() => handleChangeDefaultEngine(engine)}
-                          style={{ fontSize: 12 }}
-                        >
-                          {ENGINE_LABELS[engine]}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', background: 'rgba(99, 102, 241, 0.05)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-accent)' }}>
-                    Las keys se guardan en <code>data/settings.json</code> de este proyecto (solo local, nunca se muestran completas).
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', background: 'rgba(99, 102, 241, 0.05)', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-accent)', lineHeight: 1.5 }}>
+                    Las API keys ya no se cargan desde acá — las configura quien administra el proyecto como variable de entorno (<code>GEMINI_API_KEY</code> / <code>ANTHROPIC_API_KEY</code>) en Vercel o en <code>.env.local</code> para uso en tu computadora. Si falta alguna, avisale al admin.
                   </div>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setApiKeyModalOpen(false)}>Cerrar</button>
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={() => handleSaveSettings()}
-                    disabled={savingSettings || (!geminiKeyInput.trim() && !anthropicKeyInput.trim())}
-                  >
-                    {savingSettings ? 'Guardando…' : 'Guardar keys'}
-                  </button>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setApiKeyModalOpen(false)}>Cerrar</button>
                 </div>
               </div>
             </div>

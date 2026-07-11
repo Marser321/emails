@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, Clipboard, Copy, FilePenLine, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { Building2, Check, Clipboard, Copy, FilePenLine, ThumbsDown, ThumbsUp } from 'lucide-react';
 import EmailThumbnail from '@/components/EmailThumbnail';
 import { EmailHistoryEntry } from '@/lib/types';
 
@@ -26,6 +27,7 @@ function relativeDate(iso: string): string {
 
 export default function EmailHistoryCard({ entry, brandName, onRated, onToast }: EmailHistoryCardProps) {
   const router = useRouter();
+  const [justCopied, setJustCopied] = useState(false);
 
   const handleCopy = async () => {
     if (!entry.htmlSnapshot) {
@@ -35,6 +37,8 @@ export default function EmailHistoryCard({ entry, brandName, onRated, onToast }:
     try {
       await navigator.clipboard.writeText(entry.htmlSnapshot);
       onToast('HTML copiado al portapapeles');
+      setJustCopied(true);
+      setTimeout(() => setJustCopied(false), 1800);
     } catch {
       onToast('Error al copiar', 'error');
     }
@@ -95,8 +99,14 @@ export default function EmailHistoryCard({ entry, brandName, onRated, onToast }:
             </button>
           </div>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={handleCopy} title="Copiar HTML" style={{ padding: '2px 7px', fontSize: 10, height: 24 }}>
-              <Clipboard size={12} /> Copiar
+            <button
+              type="button"
+              className={`btn btn-sm action-feedback-btn ${justCopied ? 'is-confirmed' : 'btn-secondary'}`}
+              onClick={handleCopy}
+              title="Copiar HTML"
+              style={{ padding: '2px 7px', fontSize: 10, height: 24 }}
+            >
+              {justCopied ? <><Check size={12} /> ¡Copiado!</> : <><Clipboard size={12} /> Copiar</>}
             </button>
             <button
               type="button"

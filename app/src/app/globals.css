@@ -1085,6 +1085,25 @@ body::after {
   50% { opacity: 0.5; }
 }
 
+@keyframes actionPop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* Confirmación visual EN el botón (copiar/descargar/compartir): más confiable
+   que un toast en una esquina cuando la app corre embebida en un iframe. */
+.action-feedback-btn {
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.action-feedback-btn.is-confirmed {
+  background: rgba(34, 197, 94, 0.16) !important;
+  border-color: rgba(34, 197, 94, 0.5) !important;
+  color: #22c55e !important;
+  animation: actionPop 0.35s ease;
+}
+
 /* ============================================
    Responsive
    ============================================ */
