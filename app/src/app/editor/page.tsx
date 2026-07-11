@@ -140,7 +140,8 @@ function EditorContent() {
       .then(allBrands => {
         setBrands(allBrands);
         if (allBrands.length > 0) {
-          setSelectedBrandId(prev => prev || allBrands[0].id);
+          const defaultBrand = allBrands.find(b => b.isFavorite) ?? allBrands[0];
+          setSelectedBrandId(prev => prev || defaultBrand.id);
         }
       })
       .catch(e => console.error('Error loading brands', e));
@@ -361,6 +362,12 @@ function EditorContent() {
 
     fetch(`/api/history/${emailId}?brandId=${encodeURIComponent(brandId)}`)
       .then(res => {
+        // Sesión vencida: el middleware redirige a /login devolviendo HTML 200,
+        // no un error — sin este chequeo, res.json() explota y el catch genérico
+        // deja el editor silenciosamente en la marca por defecto (AD Media Solution).
+        if (res.redirected || !res.headers.get('content-type')?.includes('application/json')) {
+          throw new Error('SESSION_EXPIRED');
+        }
         if (!res.ok) throw new Error('Registro no encontrado');
         return res.json();
       })
@@ -381,28 +388,33 @@ function EditorContent() {
           showToast('📥 Email cargado desde el historial');
         }
       })
-      .catch(() => showToast('❌ No se pudo cargar el email del historial', 'error'));
+      .catch((e: Error) => {
+        if (e.message === 'SESSION_EXPIRED') {
+          window.location.href = '/login';
+          return;
+        }
+        showToast('❌ No se pudo cargar el email del historial', 'error');
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, mounted]);
 
-  // Apply template defaults when template changes
-  useEffect(() => {
-    const tmpl = TEMPLATES.find(t => t.type === selectedTemplate);
+  // Elegir plantilla desde la grilla: aplica sus defaults SOLO en esta interacción
+  // (no como efecto de selectedTemplate, para no pisar contenido recién cargado
+  // desde el historial, un share-link o un draft — ver auditoría del bug de "Recientes").
+  const handleChooseTemplate = useCallback((type: TemplateType) => {
+    setSelectedTemplate(type);
+    const tmpl = TEMPLATES.find(t => t.type === type);
     if (tmpl?.defaultContent) {
-      setContent(prev => {
-        const next = {
-          ...prev,
-          label: tmpl.defaultContent.label || prev.label,
-          bulletsTitle: tmpl.defaultContent.bulletsTitle || prev.bulletsTitle,
-          ctaText: tmpl.defaultContent.ctaText || prev.ctaText,
-          preCta: tmpl.defaultContent.preCta || prev.preCta,
-          footerNote: tmpl.defaultContent.footerNote || prev.footerNote,
-        };
-        // Avoid overwriting on mount if history exists
-        return next;
-      });
+      setContent(prev => ({
+        ...prev,
+        label: tmpl.defaultContent.label || prev.label,
+        bulletsTitle: tmpl.defaultContent.bulletsTitle || prev.bulletsTitle,
+        ctaText: tmpl.defaultContent.ctaText || prev.ctaText,
+        preCta: tmpl.defaultContent.preCta || prev.preCta,
+        footerNote: tmpl.defaultContent.footerNote || prev.footerNote,
+      }));
     }
-  }, [selectedTemplate]);
+  }, []);
 
   // Generate HTML
   const generateHtml = useCallback(() => {
@@ -1207,7 +1219,14 @@ function EditorContent() {
                               id="brand-selector"
                               className="form-select"
                               value={selectedBrandId}
-                              onChange={e => setSelectedBrandId(e.target.value)}
+                              onChange={e => {
+                                setSelectedBrandId(e.target.value);
+                                // Cambiar de marca manualmente desconecta el email actual
+                                // del historial que se estaba editando (ver auditoría del
+                                // bug de "Recientes"): si no, un rating o "Copiar HTML"
+                                // posterior pisaría el registro de la marca anterior.
+                                setLastHistory(null);
+                              }}
                             >
                               {brands.map(b => (
                                 <option key={b.id} value={b.id}>
@@ -1242,10 +1261,10 @@ function EditorContent() {
                                 <div
                                   key={t.type}
                                   className={`template-card ${selectedTemplate === t.type ? 'selected' : ''}`}
-                                  onClick={() => setSelectedTemplate(t.type)}
+                                  onClick={() => handleChooseTemplate(t.type)}
                                   role="button"
                                   tabIndex={0}
-                                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelectedTemplate(t.type); }}
+                                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleChooseTemplate(t.type); }}
                                   style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 10px', borderRadius: 'var(--radius-md)' }}
                                 >
                                   <div className="template-icon" style={{ fontSize: 24 }} aria-hidden="true">
