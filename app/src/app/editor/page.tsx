@@ -257,64 +257,75 @@ function EditorContent() {
         const fieldName = event.data.field;
         let elementId = `content-${fieldName}`;
         
-        if (fieldName.startsWith('bullet-')) {
-          const index = parseInt(fieldName.split('-')[1]);
-          const bulletInputs = document.querySelectorAll('.bullet-item input');
-          if (bulletInputs[index]) {
-            const inputEl = bulletInputs[index] as HTMLInputElement;
-            inputEl.focus();
-            inputEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            inputEl.style.outline = '2px dashed var(--accent)';
-            setTimeout(() => { inputEl.style.outline = ''; }, 1500);
-            return;
-          }
+        let targetSection = 'content';
+        if (['hero', 'imageText', 'quote'].includes(fieldName) || fieldName.startsWith('gallery-') || fieldName.startsWith('showDividers')) {
+            targetSection = 'header';
+        } else if (['emailBgColor', 'bodyBgColor', 'textureUrl', 'headerTextureUrl'].includes(fieldName)) {
+            targetSection = 'styles';
         }
         
-        // Bloques nuevos: hero / imageText / quote / gallery-N
-        if (fieldName === 'hero') {
-          elementId = 'content-hero';
-        } else if (fieldName === 'imageText') {
-          elementId = 'content-imageText';
-        } else if (fieldName === 'quote') {
-          elementId = 'content-quote';
-        } else if (fieldName.startsWith('gallery-')) {
-          elementId = 'content-hero'; // no hay input por imagen: enfoca la sección de bloques
-          const galleryInputs = document.querySelectorAll('[placeholder^="Imagen "]');
-          const index = parseInt(fieldName.split('-')[1], 10);
-          if (galleryInputs[index]) {
-            const inputEl = galleryInputs[index] as HTMLInputElement;
-            inputEl.focus();
-            inputEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            inputEl.style.outline = '2px dashed var(--accent)';
-            setTimeout(() => { inputEl.style.outline = ''; }, 1500);
-            return;
+        setExpandedSections(prev => ({ ...prev, [targetSection]: true }));
+        
+        setTimeout(() => {
+          if (fieldName.startsWith('bullet-')) {
+            const index = parseInt(fieldName.split('-')[1]);
+            const bulletInputs = document.querySelectorAll('.bullet-item input');
+            if (bulletInputs[index]) {
+              const inputEl = bulletInputs[index] as HTMLInputElement;
+              inputEl.focus();
+              inputEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              inputEl.style.outline = '2px dashed var(--accent)';
+              setTimeout(() => { inputEl.style.outline = ''; }, 1500);
+              return;
+            }
           }
-        }
+          
+          // Bloques nuevos: hero / imageText / quote / gallery-N
+          if (fieldName === 'hero') {
+            elementId = 'content-hero';
+          } else if (fieldName === 'imageText') {
+            elementId = 'content-imageText';
+          } else if (fieldName === 'quote') {
+            elementId = 'content-quote';
+          } else if (fieldName.startsWith('gallery-')) {
+            elementId = 'content-hero'; // no hay input por imagen: enfoca la sección de bloques
+            const galleryInputs = document.querySelectorAll('[placeholder^="Imagen "]');
+            const index = parseInt(fieldName.split('-')[1], 10);
+            if (galleryInputs[index]) {
+              const inputEl = galleryInputs[index] as HTMLInputElement;
+              inputEl.focus();
+              inputEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              inputEl.style.outline = '2px dashed var(--accent)';
+              setTimeout(() => { inputEl.style.outline = ''; }, 1500);
+              return;
+            }
+          }
 
-        // Custom fallbacks
-        if (fieldName === 'bulletsTitle') {
-          elementId = 'bullets-title';
-        } else if (fieldName === 'eventDate') {
-          elementId = 'event-date';
-        } else if (fieldName === 'eventTime') {
-          elementId = 'event-time';
-        } else if (fieldName === 'preCta') {
-          elementId = 'pre-cta';
-        } else if (fieldName === 'footerNote') {
-          elementId = 'footer-note';
-        } else if (fieldName === 'ctaText') {
-          elementId = 'cta-text';
-        } else if (fieldName === 'secondaryCtaText') {
-          elementId = 'secondary-cta-text';
-        }
-        
-        const element = document.getElementById(elementId) as HTMLElement | null;
-        if (element) {
-          element.focus();
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          element.style.outline = '2px dashed var(--accent)';
-          setTimeout(() => { element.style.outline = ''; }, 1500);
-        }
+          // Custom fallbacks
+          if (fieldName === 'bulletsTitle') {
+            elementId = 'bullets-title';
+          } else if (fieldName === 'eventDate') {
+            elementId = 'event-date';
+          } else if (fieldName === 'eventTime') {
+            elementId = 'event-time';
+          } else if (fieldName === 'preCta') {
+            elementId = 'pre-cta';
+          } else if (fieldName === 'footerNote') {
+            elementId = 'footer-note';
+          } else if (fieldName === 'ctaText') {
+            elementId = 'cta-text';
+          } else if (fieldName === 'secondaryCtaText') {
+            elementId = 'secondary-cta-text';
+          }
+          
+          const element = document.getElementById(elementId) as HTMLElement | null;
+          if (element) {
+            element.focus();
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element.style.outline = '2px dashed var(--accent)';
+            setTimeout(() => { element.style.outline = ''; }, 1500);
+          }
+        }, 50);
       }
     };
     window.addEventListener('message', handleMessage);
