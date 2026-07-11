@@ -256,7 +256,7 @@ Variables: `{{1}}` nombre · `{{2}}` link ofertas
 ## Checklist de activación en GHL
 
 - [ ] Registrar las 12 plantillas de WhatsApp en Meta (vía GHL) con su categoría correcta
-- [ ] Reemplazar `{{custom_values.masterclass_link}}`, `{{custom_values.offers_link}}` y `{{custom_values.academy_link}}` por los links reales
-- [ ] Mapear variables `{{1}}`, `{{2}}`… a los custom values / merge fields de GHL en cada workflow
+- [ ] En GHL: Configuración → Valores personalizados (Custom Values), crear `masterclass_link`, `offers_link` y `academy_link` con los links reales — así resuelven automáticamente los `{{custom_values.masterclass_link}}` / `{{custom_values.offers_link}}` / `{{custom_values.academy_link}}` de este documento
+- [ ] Mapear variables `{{1}}`, `{{2}}`… de cada plantilla de WhatsApp a estos custom values / merge fields de contacto en cada workflow
 - [ ] Configurar los triggers: registro → recordatorios; pago fallido/exitoso → transaccionales; asistió-sin-comprar → secuencia D+1/D+2/D+3/D+5
 - [ ] Exportar el HTML de los emails desde la app (historial de AMO en `/editor`)
