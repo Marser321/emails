@@ -12,6 +12,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "assets:build": "node scripts/build-starter-assets.mjs",
+    "templates:thumbnails": "node scripts/build-template-thumbnails.mjs",
     "assets:seed": "node scripts/seed-starter-assets.mjs",
     "icons:build": "node scripts/build-vector-assets.mjs",
     "data:migrate": "node scripts/migrate-local-data.mjs"

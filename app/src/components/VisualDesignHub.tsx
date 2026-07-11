@@ -14,11 +14,12 @@ interface VisualDesignHubProps {
   brand: Brand | null;
   content: EmailContent;
   onUpdateColors: (updates: { 
-    brandColors?: { primary: string; accent: string; gradientStart: string; gradientEnd: string };
-    contentColors?: { emailBgColor: string; bodyBgColor: string };
+    contentColors: { primaryColor: string; accentColor: string; gradientStart: string; gradientEnd: string; emailBgColor: string; bodyBgColor: string; bodyTextColor: string };
   }) => void;
+  onSaveBrandColors?: (colors: { primary: string; accent: string; gradientStart: string; gradientEnd: string }) => void;
   onInjectAdset: (imageUrl: string) => void;
   brandId: string;
+  initialTab?: 'colors' | 'banners';
 }
 
 // Preset color palettes (highly curated, beautiful & readable)
@@ -210,19 +211,21 @@ export default function VisualDesignHub({
   content,
   onUpdateColors,
   onInjectAdset,
-  brandId
+  brandId,
+  onSaveBrandColors,
+  initialTab = 'colors',
 }: VisualDesignHubProps) {
-  const [activeTab, setActiveTab] = useState<'colors' | 'banners'>('colors');
+  const [activeTab, setActiveTab] = useState<'colors' | 'banners'>(initialTab);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // === COLOR STATES ===
-  const [primaryColor, setPrimaryColor] = useState(brand?.colors.primary || '#0B2A4A');
-  const [accentColor, setAccentColor] = useState(brand?.colors.accent || '#29ABE2');
-  const [gradientStart, setGradientStart] = useState(brand?.colors.gradientStart || '#29ABE2');
-  const [gradientEnd, setGradientEnd] = useState(brand?.colors.gradientEnd || '#1B6FC4');
+  const [primaryColor, setPrimaryColor] = useState(content.primaryColor || brand?.colors.primary || '#0B2A4A');
+  const [accentColor, setAccentColor] = useState(content.accentColor || brand?.colors.accent || '#29ABE2');
+  const [gradientStart, setGradientStart] = useState(content.gradientStart || brand?.colors.gradientStart || '#29ABE2');
+  const [gradientEnd, setGradientEnd] = useState(content.gradientEnd || brand?.colors.gradientEnd || '#1B6FC4');
   const [emailBgColor, setEmailBgColor] = useState(content.emailBgColor || '#eef2f6');
   const [bodyBgColor, setBodyBgColor] = useState(content.bodyBgColor || '#ffffff');
-  const [textColor, setTextColor] = useState('#4a5568'); // default render color for bodies
+  const [textColor, setTextColor] = useState(content.typography?.bodyColor || '#4a5568');
 
   // === BANNER CREATOR STATES ===
   const [bannerLayout, setBannerLayout] = useState<'minimal' | 'promo' | 'coupon'>('promo');
@@ -284,6 +287,11 @@ export default function VisualDesignHub({
     setPrevContent(content);
     setEmailBgColor(content.emailBgColor || '#eef2f6');
     setBodyBgColor(content.bodyBgColor || '#ffffff');
+    setTextColor(content.typography?.bodyColor || '#4a5568');
+    setPrimaryColor(content.primaryColor || brand?.colors.primary || '#0B2A4A');
+    setAccentColor(content.accentColor || brand?.colors.accent || '#29ABE2');
+    setGradientStart(content.gradientStart || brand?.colors.gradientStart || '#29ABE2');
+    setGradientEnd(content.gradientEnd || brand?.colors.gradientEnd || '#1B6FC4');
   }
 
   // Contraste calculado en tiempo real
@@ -307,15 +315,8 @@ export default function VisualDesignHub({
 
   const handleApplyColors = () => {
     onUpdateColors({
-      brandColors: {
-        primary: primaryColor,
-        accent: accentColor,
-        gradientStart: gradientStart,
-        gradientEnd: gradientEnd,
-      },
       contentColors: {
-        emailBgColor: emailBgColor,
-        bodyBgColor: bodyBgColor,
+        primaryColor, accentColor, gradientStart, gradientEnd, emailBgColor, bodyBgColor, bodyTextColor: textColor,
       }
     });
   };
@@ -801,9 +802,9 @@ export default function VisualDesignHub({
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999 }}>
+    <div className="modal-overlay design-hub-overlay" onClick={onClose}>
       <div 
-        className="glass-shell" 
+        className="glass-shell design-hub-dialog"
         onClick={e => e.stopPropagation()} 
         style={{ 
           width: '95vw', 
@@ -914,6 +915,10 @@ export default function VisualDesignHub({
                         <div className="form-group">
                           <label className="form-label" style={{ fontSize: 11 }}>Botón (Acento)</label>
                           <input type="color" className="form-color-input" value={accentColor} onChange={e => setAccentColor(e.target.value)} style={{ width: '100%', height: 32 }} />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: 11 }}>Texto del cuerpo</label>
+                          <input type="color" className="form-color-input" value={textColor} onChange={e => setTextColor(e.target.value)} style={{ width: '100%', height: 32 }} />
                         </div>
                       </div>
 
@@ -1362,9 +1367,12 @@ export default function VisualDesignHub({
             </button>
             
             {activeTab === 'colors' ? (
-              <button className="btn btn-primary" onClick={handleApplyColors}>
-                Aplicar Paleta al Email
-              </button>
+              <>
+                <button className="btn btn-secondary" onClick={() => onSaveBrandColors?.({ primary: primaryColor, accent: accentColor, gradientStart, gradientEnd })}>
+                  Guardar como colores de marca
+                </button>
+                <button className="btn btn-primary" onClick={handleApplyColors}>Aplicar solo a este email</button>
+              </>
             ) : (
               <button 
                 className="btn btn-primary group" 

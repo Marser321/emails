@@ -6,9 +6,9 @@ import { renderEmail } from '@/lib/templates';
 import { sendTestRequestSchema, validationMessage } from '@/lib/server/api-schemas';
 import { requireUser, AuthenticationError } from '@/lib/server/auth';
 import { getBrandById } from '@/lib/server/brandStore';
-import type { EmailDocumentV3 } from '@/lib/types';
+import type { EmailDocumentV3, EmailDocumentV4 } from '@/lib/types';
 
-function plainText(document: EmailDocumentV3): string {
+function plainText(document: EmailDocumentV3 | EmailDocumentV4): string {
   return document.blocks.flatMap(block => {
     if (block.type === 'text') return [block.headline, block.body];
     if (block.type === 'bullets') return [block.bulletsTitle, ...block.bullets];

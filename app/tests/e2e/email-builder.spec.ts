@@ -64,3 +64,23 @@ test('dashboard, editor, brand modal and asset library visual states', async ({ 
   await expectNoPageOverflow(page);
   await expect(page).toHaveScreenshot('brand-modal.png', { fullPage: true });
 });
+
+test('preset, contextual inspector and undo work together', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.route('**/api/brands', route => route.fulfill({ json: [{
+    id: 'test-brand', name: 'AD Media Solution', category: 'Marketing', isFavorite: true,
+    colors: { primary: '#0b2a4a', accent: '#29abe2', gradientStart: '#29abe2', gradientEnd: '#1b6fc4' },
+    fonts: { heading: 'Arial', body: 'Verdana' }, logo: { type: 'text', value: 'AD|Media' },
+    footer: { tagline: 'Growth Marketing', subtitle: '', disclaimer: '', address: '{{location.full_address}}', unsubscribeLabel: 'Cancelar suscripción', unsubscribeUrl: '{{unsubscribe}}' },
+    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+  }] }));
+  await page.goto('/editor', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Keynote Editorial' }).click();
+  await expect(page.getByRole('heading', { name: /Canvas Visual/ })).toBeVisible();
+  await page.frameLocator('iframe').getByText('• Una propuesta más clara', { exact: true }).click();
+  await expect(page.locator('.canvas-block-card.is-active .block-type-badge')).toHaveText('Bullets');
+  const textColor = page.getByRole('region', { name: 'Estilo del bloque' }).getByLabel('Texto', { exact: true });
+  await textColor.fill('#24566f');
+  await expect(textColor).toHaveValue('#24566f');
+  await expect(page.getByRole('button', { name: '↩️' })).toBeEnabled();
+});

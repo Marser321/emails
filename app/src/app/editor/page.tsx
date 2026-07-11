@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -13,6 +14,7 @@ import { analyzeEmailHtml, listEmailIssues } from '@/lib/email-checks';
 import { renderEmail } from '@/lib/templates';
 import { AIEngine, Brand, Draft, EmailContent, LayoutVariant, TemplateType, TEMPLATES } from '@/lib/types';
 import { Palette } from 'lucide-react';
+import { applyPresetPreservingContent, getTemplatePreset, presetsForObjective } from '@/lib/template-presets';
 
 const LAYOUT_OPTIONS: { id: LayoutVariant; name: string; icon: string; description: string }[] = [
   { id: 'classic', name: 'Clásico', icon: '📄', description: 'Header con gradiente, el layout original' },
@@ -105,8 +107,6 @@ function EditorContent() {
   const [activeTab, setActiveTab] = useState<'editor' | 'canvas' | 'drafts'>('editor');
   const [savedDrafts, setSavedDrafts] = useState<Draft[]>([]);
   const [newDraftName, setNewDraftName] = useState('');
-  const [abVariations, setAbVariations] = useState<{ subjects?: { type: string; text: string }[]; preheaders?: string[] } | null>(null);
-  const [generatingAb, setGeneratingAb] = useState(false);
   const [testEmail, setTestEmail] = useState('');
   const [sendingTest, setSendingTest] = useState(false);
   const [testMessageUrl, setTestMessageUrl] = useState<string | null>(null);
@@ -114,6 +114,7 @@ function EditorContent() {
   const [previewWidth, setPreviewWidth] = useState(600);
   const [designHubOpen, setDesignHubOpen] = useState(false);
   const [designHubTab, setDesignHubTab] = useState<'colors' | 'banners'>('colors');
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
 
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     brand: true,
@@ -126,6 +127,11 @@ function EditorContent() {
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -185,7 +191,7 @@ function EditorContent() {
       setContent({ ...history[prevIndex] });
       showToast('↩️ Deshacer completado');
     }
-  }, [history, historyIndex]);
+  }, [history, historyIndex, showToast]);
 
   const handleRedo = useCallback(() => {
     if (historyIndex < history.length - 1) {
@@ -194,11 +200,13 @@ function EditorContent() {
       setContent({ ...history[nextIndex] });
       showToast('↪️ Rehacer completado');
     }
-  }, [history, historyIndex]);
+  }, [history, historyIndex, showToast]);
 
   // Keybindings for Undo/Redo
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.matches('input, textarea, [contenteditable="true"]')) return;
       const isMac = navigator.platform?.toUpperCase().indexOf('MAC') >= 0;
       const ctrlKey = isMac ? e.metaKey : e.ctrlKey;
       
@@ -220,8 +228,23 @@ function EditorContent() {
 
   // Click-to-edit listener from Iframe
   useEffect(() => {
+    const bridge = window as Window & { __emailStudioSelectBlock?: (blockId: string) => void };
+    bridge.__emailStudioSelectBlock = (blockId: string) => {
+      setSelectedBlockId(blockId);
+      setActiveTab('canvas');
+    };
+    return () => { delete bridge.__emailStudioSelectBlock; };
+  }, []);
+
+  useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      if (event.source !== iframeRef.current?.contentWindow && event.source !== mobileIframeRef.current?.contentWindow) return;
       if (event.data && event.data.type === 'focus-field') {
+        if (typeof event.data.blockId === 'string' && event.data.blockId) {
+          setSelectedBlockId(event.data.blockId);
+          setActiveTab('canvas');
+          return;
+        }
         const fieldName = event.data.field;
         let elementId = `content-${fieldName}`;
         
@@ -312,13 +335,19 @@ function EditorContent() {
         showToast('❌ Error al decodificar el borrador compartido', 'error');
       }
     }
-  }, [searchParams, mounted]);
+  }, [searchParams, mounted, showToast]);
 
   // Handle URL template param
   useEffect(() => {
     const template = searchParams.get('template') as TemplateType;
+    const brand = searchParams.get('brand');
+    if (brand) setSelectedBrandId(brand);
     if (template && TEMPLATES.find(t => t.type === template)) {
       setSelectedTemplate(template);
+      const preset = getTemplatePreset(searchParams.get('preset') || undefined);
+      if (preset?.objective === template) {
+        setContent(previous => applyPresetPreservingContent(preset, previous));
+      }
     }
   }, [searchParams]);
 
@@ -389,16 +418,18 @@ function EditorContent() {
     setHtmlOutput(html);
 
     // Inject click listener into iframe
-    let interactiveHtml = html + `
+    const interactionScript = `
           <script>
             document.addEventListener('click', function(e) {
               let target = e.target;
               while (target && target !== document.body) {
                 const field = target.getAttribute('data-editor-field');
-                if (field) {
+                const block = target.getAttribute('data-block-id') || target.closest('[data-block-id]')?.getAttribute('data-block-id');
+                if (field || block) {
                   e.preventDefault();
                   e.stopPropagation();
-                  window.parent.postMessage({ type: 'focus-field', field: field }, '*');
+                  if (block && window.parent.__emailStudioSelectBlock) window.parent.__emailStudioSelectBlock(block);
+                  window.parent.postMessage({ type: 'focus-field', field: field, blockId: block }, '*');
                   break;
                 }
                 target = target.parentElement;
@@ -419,6 +450,7 @@ function EditorContent() {
             document.head.appendChild(style);
           </script>
         `;
+    let interactiveHtml = html.replace('</body>', `${interactionScript}</body>`);
 
         if (simulatedDarkMode) {
           interactiveHtml = interactiveHtml.replace('</head>', `
@@ -459,6 +491,15 @@ function EditorContent() {
       doc.open();
       doc.write(interactiveHtml);
       doc.close();
+      doc.addEventListener('click', event => {
+        const target = event.target as Element | null;
+        if (!target || typeof target.closest !== 'function') return;
+        const blockId = target?.closest('[data-block-id]')?.getAttribute('data-block-id');
+        if (!blockId) return;
+        event.preventDefault();
+        setSelectedBlockId(blockId);
+        setActiveTab('canvas');
+      }, true);
       // Auto-resize iframe
       setTimeout(() => {
         if (doc.body) {
@@ -469,11 +510,6 @@ function EditorContent() {
     writeTo(iframeRef.current);
     writeTo(mobileIframeRef.current);
   }, [mounted, generateHtml, simulatedDarkMode, viewMode]);
-
-  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  }, []);
 
   const handleCopyHtml = async () => {
     // Con imágenes locales: elegir modo de export (URL pública / ZIP / base64)
@@ -535,6 +571,17 @@ function EditorContent() {
       saveHistory(next);
       return next;
     });
+  };
+
+  const handleApplyPreset = (presetId: string) => {
+    const preset = presetsForObjective(selectedTemplate).find(item => item.id === presetId);
+    if (!preset) return;
+    const updated = applyPresetPreservingContent(preset, content);
+    setContent(updated);
+    saveHistory(updated);
+    setSelectedBlockId(updated.blocks?.find(block => block.type === 'text')?.id || null);
+    setActiveTab('canvas');
+    showToast(`Diseño ${preset.name} aplicado a este email`);
   };
 
   const handleAssetSelected = (url: string) => {
@@ -719,6 +766,13 @@ function EditorContent() {
         ...prev,
         emailBgColor: newEmailBg,
         bodyBgColor: newBodyBg,
+        primaryColor: brand.colors.primary,
+        accentColor: brand.colors.accent,
+        gradientStart: brand.colors.gradientStart,
+        gradientEnd: brand.colors.gradientEnd,
+        headerBgColor: brand.colors.headerBg || brand.colors.primary,
+        footerBgColor: brand.colors.footerBg || brand.colors.primary,
+        typography: { ...prev.typography, headingFont: brand.fonts.heading, bodyFont: brand.fonts.body, headingColor: brand.colors.primary },
       };
       saveHistory(next);
       return next;
@@ -1004,41 +1058,6 @@ function EditorContent() {
     }
   };
 
-  // Generate A/B Testing subject line variants
-  const handleGenerateAb = async () => {
-    if (!content.headline && !content.body) {
-      showToast('⚠️ Escribe el título y cuerpo del correo antes de generar variantes A/B', 'error');
-      return;
-    }
-
-    setGeneratingAb(true);
-    try {
-      const response = await fetch('/api/ab-test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          headline: content.headline,
-          body: content.body,
-          engine: selectedEngine,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Error al generar variantes.');
-      }
-
-      setAbVariations(data);
-      showToast(`🧪 Variantes A/B generadas con ${ENGINE_LABELS[selectedEngine]}`);
-    } catch (err) {
-      showToast((err instanceof Error ? err.message : null) || 'Error al conectar con la IA', 'error');
-    } finally {
-      setGeneratingAb(false);
-    }
-  };
-
   // Send real SMTP or Ethereal email test
   const handleSendTestEmailReal = async () => {
     if (!testEmail.trim()) {
@@ -1250,6 +1269,18 @@ function EditorContent() {
                     </div>
 
                     {/* Módulo 2: Estructura & Bloques */}
+                    <section className="preset-strip" aria-label="Diseños para este objetivo">
+                      <div className="preset-strip-heading"><div><span>Composición visual</span><small>Elige una referencia; tu contenido se conserva</small></div></div>
+                      <div className="preset-choice-grid">
+                        {presetsForObjective(selectedTemplate).map(preset => (
+                          <button key={preset.id} type="button" className={`preset-choice ${content.presetId === preset.id ? 'active' : ''}`} onClick={() => handleApplyPreset(preset.id)}>
+                            <span className={`preset-miniature ${preset.variant === 'Editorial' ? 'editorial' : 'structured'}`} aria-hidden="true"><i /><b /><em /><strong /></span>
+                            <span><b>{preset.name}</b><small>{preset.variant}</small></span>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+
                     <div className={`accordion-module ${expandedSections.blocks ? 'open' : ''}`}>
                       <button
                         type="button"
@@ -1964,11 +1995,10 @@ function EditorContent() {
                   <CanvasEditor
                     content={content}
                     brand={selectedBrand || null}
-                    onContentChange={(updates) => setContent(prev => ({ ...prev, ...updates }))}
-                    onOpenDesignHub={(tab) => {
-                      setDesignHubTab(tab || 'banners');
-                      setDesignHubOpen(true);
-                    }}
+                    onContentChange={setBlockValue}
+                    selectedBlockId={selectedBlockId}
+                    onBlockSelect={setSelectedBlockId}
+                    onOpenDesignHub={(tab) => { setDesignHubTab(tab || 'colors'); setDesignHubOpen(true); }}
                   />
                 )}
 
@@ -2127,6 +2157,7 @@ function EditorContent() {
 
                     {/* Undo / Redo */}
                     <div style={{ display: 'flex', gap: 6 }}>
+                      <span className="history-indicator" title="Cambios guardados en esta sesión">{Math.max(0, historyIndex + 1)} cambios</span>
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm"
@@ -2271,7 +2302,7 @@ function EditorContent() {
                     <iframe
                       ref={iframeRef}
                       title="Email Preview"
-                      sandbox="allow-same-origin"
+                      sandbox="allow-same-origin allow-scripts"
                       style={{
                         width: viewMode === 'mobile' ? 390 : viewMode === 'split' ? 600 : previewWidth,
                         maxWidth: viewMode === 'split' ? undefined : '100%',
@@ -2289,7 +2320,7 @@ function EditorContent() {
                       <iframe
                         ref={mobileIframeRef}
                         title="Email Preview Mobile"
-                        sandbox="allow-same-origin"
+                        sandbox="allow-same-origin allow-scripts"
                         style={{
                           width: 390,
                           borderRadius: 'var(--radius-md)',
@@ -2513,29 +2544,28 @@ function EditorContent() {
             brand={selectedBrand || null}
             content={content}
             brandId={selectedBrandId}
-            onUpdateColors={async ({ brandColors, contentColors }) => {
-              if (brandColors && selectedBrand) {
-                const updatedBrand = {
-                  ...selectedBrand,
-                  colors: {
-                    ...selectedBrand.colors,
-                    ...brandColors
-                  }
-                };
-                setBrands(prev => prev.map(b => b.id === selectedBrandId ? updatedBrand : b));
-                await updateBrand(selectedBrandId, updatedBrand);
-              }
-
-              if (contentColors) {
-                const updatedContent = {
-                  ...content,
-                  emailBgColor: contentColors.emailBgColor,
-                  bodyBgColor: contentColors.bodyBgColor,
-                };
-                setContent(updatedContent);
-                saveHistory(updatedContent);
-              }
-              showToast('🎨 Paleta de colores aplicada');
+            initialTab={designHubTab}
+            onUpdateColors={({ contentColors }) => {
+              const updatedContent = {
+                ...content,
+                primaryColor: contentColors.primaryColor,
+                accentColor: contentColors.accentColor,
+                gradientStart: contentColors.gradientStart,
+                gradientEnd: contentColors.gradientEnd,
+                emailBgColor: contentColors.emailBgColor,
+                bodyBgColor: contentColors.bodyBgColor,
+                typography: { ...content.typography, bodyColor: contentColors.bodyTextColor },
+              };
+              setContent(updatedContent);
+              saveHistory(updatedContent);
+              showToast('Paleta aplicada solo a este email');
+            }}
+            onSaveBrandColors={async (colors) => {
+              if (!selectedBrand) return;
+              const updatedBrand = { ...selectedBrand, colors: { ...selectedBrand.colors, ...colors } };
+              setBrands(prev => prev.map(brand => brand.id === selectedBrandId ? updatedBrand : brand));
+              await updateBrand(selectedBrandId, updatedBrand);
+              showToast('Colores guardados como predeterminados de la marca');
             }}
             onInjectAdset={(imageUrl) => {
               // Inyectar banner como bloque Hero

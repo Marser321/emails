@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEmailDocument, documentToContent, isEmailDocumentV3, legacyContentToBlocks } from './email-document';
+import { createEmailDocument, documentToContent, isEmailDocumentV3, isEmailDocumentV4, legacyContentToBlocks, normalizeEmailDocument } from './email-document';
 import { DEFAULT_BRAND, type Brand, type EmailContent } from './types';
 
 const brand: Brand = { ...DEFAULT_BRAND, id: 'brand', name: 'Marca', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
@@ -9,7 +9,7 @@ const content: EmailContent = {
   eventDate: '', eventTime: '', preCta: '', footerNote: '',
 };
 
-describe('EmailDocumentV3', () => {
+describe('EmailDocumentV4', () => {
   it('adapts legacy drafts deterministically', () => {
     const blocks = legacyContentToBlocks(content);
     expect(blocks[0]).toEqual({ id: 'legacy-header', type: 'header' });
@@ -19,8 +19,9 @@ describe('EmailDocumentV3', () => {
 
   it('creates and restores the canonical document', () => {
     const document = createEmailDocument(brand, 'newsletter', content);
-    expect(isEmailDocumentV3(document)).toBe(true);
-    expect(document.schemaVersion).toBe(3);
+    expect(isEmailDocumentV4(document)).toBe(true);
+    expect(document.schemaVersion).toBe(4);
+    expect(document.presetId).toBe('editorial-digest');
     expect(document.compliance.unsubscribeUrl).toBe('{{unsubscribe}}');
     const restored = documentToContent(document);
     expect(restored.subject).toBe('Asunto');
@@ -29,5 +30,17 @@ describe('EmailDocumentV3', () => {
 
   it('rejects incomplete lookalikes', () => {
     expect(isEmailDocumentV3({ schemaVersion: 3, brandId: 'x', blocks: [] })).toBe(false);
+  });
+
+  it('normalizes V3 documents without losing blocks', () => {
+    const legacy = {
+      schemaVersion: 3 as const, brandId: 'brand', template: 'newsletter' as const, subject: 'Asunto', preheader: '', locale: 'es' as const,
+      emailWidth: 600, theme: { pageBackground: '#eef2f6', bodyBackground: '#ffffff', emailWidth: 600 },
+      blocks: legacyContentToBlocks(content), compliance: { unsubscribeLabel: 'Salir', unsubscribeUrl: '{{unsubscribe}}', address: '{{location.full_address}}' },
+    };
+    const normalized = normalizeEmailDocument(legacy);
+    expect(normalized.schemaVersion).toBe(4);
+    expect(normalized.blocks).toEqual(legacy.blocks);
+    expect(normalized.theme.typography.bodyColor).toBe('#425466');
   });
 });

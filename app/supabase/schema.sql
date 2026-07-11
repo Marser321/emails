@@ -32,14 +32,14 @@ create table if not exists public.history (
   html_snapshot text,
   rating text check (rating is null or rating in ('up', 'down')),
   notes text,
-  schema_version integer not null default 3,
+  schema_version integer not null default 4,
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 alter table public.history add column if not exists schema_version integer not null default 1;
-alter table public.history alter column schema_version set default 3;
+alter table public.history alter column schema_version set default 4;
 alter table public.history add column if not exists created_by uuid references auth.users(id) on delete set null;
 
 create table if not exists public.drafts (
@@ -50,13 +50,13 @@ create table if not exists public.drafts (
   brand_id text not null,
   template text not null,
   content jsonb not null,
-  schema_version integer not null default 3,
+  schema_version integer not null default 4,
   created_by uuid references auth.users(id) on delete set null,
   date timestamptz not null default now()
 );
 
 alter table public.drafts add column if not exists schema_version integer not null default 1;
-alter table public.drafts alter column schema_version set default 3;
+alter table public.drafts alter column schema_version set default 4;
 alter table public.drafts add column if not exists created_by uuid references auth.users(id) on delete set null;
 
 create table if not exists public.settings (

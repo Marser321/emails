@@ -59,7 +59,7 @@ export async function saveDraft(input: Omit<Draft, 'id' | 'date'> & Partial<Pick
     template: draft.template,
     content: draft.content,
     date: draft.date,
-    schema_version: 3,
+    schema_version: 4,
     created_by: userId,
   });
   if (error) throw new Error(error.message);

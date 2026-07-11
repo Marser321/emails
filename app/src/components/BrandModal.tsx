@@ -5,7 +5,7 @@ import { Brand, BRAND_CATEGORIES } from '@/lib/types';
 import { createBrand, updateBrand } from '@/lib/brands';
 import { uploadAsset } from '@/lib/assets';
 import AssetPicker from '@/components/AssetPicker';
-import { ImageIcon, Library, LoaderCircle, Mic2, Pencil, Plus, Save, Type, Upload, X } from 'lucide-react';
+import { LoaderCircle } from 'lucide-react';
 
 interface BrandModalProps {
   brand: Brand | null;

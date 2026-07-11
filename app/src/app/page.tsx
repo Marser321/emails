@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ArrowUpRight, Inbox, Mail, Plus, Search, ThumbsUp } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import EmailHistoryCard from '@/components/EmailHistoryCard';
 import TemplateIcon from '@/components/TemplateIcon';
 import { getAllBrands } from '@/lib/brands';
-import { Brand, EmailHistoryEntry, TEMPLATES } from '@/lib/types';
+import { Brand, EmailHistoryEntry } from '@/lib/types';
+import { TEMPLATE_PRESETS } from '@/lib/template-presets';
 import { useHydrated } from '@/hooks/useHydrated';
 
 export default function Dashboard() {
@@ -192,7 +194,7 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Motor HTML</div>
-                    <div style={{ fontSize: 14, color: 'var(--text-secondary)', fontWeight: 600 }}>{TEMPLATES.length} plantillas compatibles con GHL</div>
+                    <div style={{ fontSize: 14, color: 'var(--text-secondary)', fontWeight: 600 }}>{TEMPLATE_PRESETS.length} diseños compatibles con GHL</div>
                   </div>
                 </div>
               </div>
@@ -221,7 +223,7 @@ export default function Dashboard() {
                       fontWeight: 800, 
                       color: 'var(--text-primary)',
                       fontVariantNumeric: 'tabular-nums'
-                    }}>{TEMPLATES.length}</span>
+                    }}>{TEMPLATE_PRESETS.length}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)', fontSize: 14 }}>Emails esta semana</span>
@@ -298,36 +300,21 @@ export default function Dashboard() {
                   </Link>
                 </div>
                 <div className="templates-grid">
-                  {TEMPLATES.map(t => (
+                  {TEMPLATE_PRESETS.map(t => (
                     <Link
-                      key={t.type}
-                      href={`/editor?template=${t.type}`}
+                      key={t.id}
+                      href={`/editor?template=${t.objective}&preset=${t.id}`}
                       style={{ textDecoration: 'none' }}
                     >
-                      <div className="glass-shell glass-shell-hoverable" style={{ padding: 4 }}>
-                        <div className="glass-core" style={{ 
-                          padding: '14px 16px', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: 14,
-                          background: 'transparent',
-                          border: 'none',
-                          boxShadow: 'none'
-                        }}>
-                          <TemplateIcon type={t.type} size={25} color="var(--accent)" />
+                      <div className="template-library-card">
+                        <div className="template-library-preview"><Image src={t.thumbnail} alt={`Vista previa de ${t.name}`} width={300} height={360} /></div>
+                        <div className="template-library-copy">
+                          <TemplateIcon type={t.objective} size={22} color="var(--accent)" />
                           <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 14, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 14, marginBottom: 2 }}>
                               {t.name}
                             </div>
-                            <div style={{ 
-                              fontSize: 12, 
-                              color: 'var(--text-muted)',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              {t.description}
-                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.variant}</div>
                           </div>
                         </div>
                       </div>

@@ -1,4 +1,5 @@
-import type { BlockConfig, Brand, EmailContent, EmailDocumentV3, TemplateType } from './types';
+import type { BlockConfig, Brand, EmailContent, EmailDocumentV3, EmailDocumentV4, EmailTypography, TemplateType } from './types';
+import { defaultPresetForObjective } from './template-presets';
 
 export function legacyContentToBlocks(content: EmailContent): BlockConfig[] {
   const blocks: BlockConfig[] = [{ id: 'legacy-header', type: 'header' }];
@@ -27,12 +28,22 @@ export function createEmailDocument(
   brand: Brand,
   template: TemplateType,
   content: EmailContent,
-): EmailDocumentV3 {
+): EmailDocumentV4 {
   const width = Math.min(700, Math.max(320, content.emailWidth || 600));
+  const preset = content.presetId || defaultPresetForObjective(template).id;
+  const typography: EmailTypography = {
+    headingFont: content.typography?.headingFont || brand.fonts.heading || 'Arial',
+    bodyFont: content.typography?.bodyFont || brand.fonts.body || 'Verdana',
+    headingColor: content.typography?.headingColor || content.primaryColor || brand.colors.primary,
+    bodyColor: content.typography?.bodyColor || '#425466', mutedColor: content.typography?.mutedColor || '#7a8792',
+    linkColor: content.typography?.linkColor || content.accentColor || brand.colors.accent,
+    ctaTextColor: content.typography?.ctaTextColor || '#ffffff',
+  };
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     brandId: brand.id,
     template,
+    presetId: preset,
     subject: content.subject || content.headline || 'Email',
     preheader: content.preheader || content.body?.slice(0, 110) || '',
     locale: 'es',
@@ -40,7 +51,13 @@ export function createEmailDocument(
     theme: {
       pageBackground: content.emailBgColor || '#eef2f6',
       bodyBackground: content.bodyBgColor || '#ffffff',
-      emailWidth: width,
+      emailWidth: width, typography,
+      primaryColor: content.primaryColor || brand.colors.primary,
+      accentColor: content.accentColor || brand.colors.accent,
+      gradientStart: content.gradientStart || brand.colors.gradientStart,
+      gradientEnd: content.gradientEnd || brand.colors.gradientEnd,
+      headerBackground: content.headerBgColor || brand.colors.headerBg || content.primaryColor || brand.colors.primary,
+      footerBackground: content.footerBgColor || brand.colors.footerBg || content.primaryColor || brand.colors.primary,
     },
     blocks: content.blocks?.length ? content.blocks : legacyContentToBlocks(content),
     compliance: {
@@ -51,7 +68,7 @@ export function createEmailDocument(
   };
 }
 
-export function documentToContent(document: EmailDocumentV3): EmailContent {
+export function documentToContent(document: EmailDocumentV3 | EmailDocumentV4): EmailContent {
   return {
     subject: document.subject,
     preheader: document.preheader,
@@ -60,8 +77,43 @@ export function documentToContent(document: EmailDocumentV3): EmailContent {
     emailWidth: document.emailWidth,
     emailBgColor: document.theme.pageBackground,
     bodyBgColor: document.theme.bodyBackground,
+    presetId: document.schemaVersion === 4 ? document.presetId : undefined,
+    typography: document.schemaVersion === 4 ? document.theme.typography : undefined,
+    primaryColor: document.schemaVersion === 4 ? document.theme.primaryColor : undefined,
+    accentColor: document.schemaVersion === 4 ? document.theme.accentColor : undefined,
+    gradientStart: document.schemaVersion === 4 ? document.theme.gradientStart : undefined,
+    gradientEnd: document.schemaVersion === 4 ? document.theme.gradientEnd : undefined,
+    headerBgColor: document.schemaVersion === 4 ? document.theme.headerBackground : undefined,
+    footerBgColor: document.schemaVersion === 4 ? document.theme.footerBackground : undefined,
     blocks: document.blocks,
     compliance: document.compliance,
+  };
+}
+
+export function isEmailDocumentV4(value: unknown): value is EmailDocumentV4 {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<EmailDocumentV4>;
+  return candidate.schemaVersion === 4 && typeof candidate.brandId === 'string' && typeof candidate.presetId === 'string'
+    && typeof candidate.subject === 'string' && candidate.locale === 'es' && Array.isArray(candidate.blocks)
+    && Boolean(candidate.theme?.typography && candidate.compliance);
+}
+
+export function normalizeEmailDocument(document: EmailDocumentV3 | EmailDocumentV4): EmailDocumentV4 {
+  if (isEmailDocumentV4(document)) return document;
+  const preset = defaultPresetForObjective(document.template);
+  return {
+    ...document,
+    schemaVersion: 4,
+    presetId: preset.id,
+    theme: {
+      ...document.theme,
+      typography: {
+        headingFont: 'Arial', bodyFont: 'Verdana', headingColor: '#10263a', bodyColor: '#425466',
+        mutedColor: '#7a8792', linkColor: '#147ca8', ctaTextColor: '#ffffff',
+      },
+      primaryColor: '#0b2a4a', accentColor: '#2979b8', gradientStart: '#2979b8', gradientEnd: '#1b6fc4',
+      headerBackground: '#0b2a4a', footerBackground: '#0b2a4a',
+    },
   };
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import {
   BlockConfig,
   CanvasBlockType,
@@ -11,9 +11,9 @@ import {
 } from '@/lib/types';
 import { listAssets, uploadAsset } from '@/lib/assets';
 import { EmailAsset } from '@/lib/types';
-import { useEffect } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, GripVertical, ImageIcon, LayoutPanelTop, LoaderCircle, Palette, Plus, Upload, X } from 'lucide-react';
+import { Palette } from 'lucide-react';
 import BlockIcon from './BlockIcon';
+import { EMAIL_SAFE_FONTS } from '@/lib/email-safety';
 
 // ============ Default block factories ============
 
@@ -42,16 +42,19 @@ interface CanvasEditorProps {
   brand: Brand | null;
   onContentChange: (updates: Partial<EmailContent>) => void;
   onOpenDesignHub?: (tab?: 'colors' | 'banners') => void;
+  selectedBlockId?: string | null;
+  onBlockSelect?: (blockId: string | null) => void;
 }
 
 // ============ Component ============
 
-export default function CanvasEditor({ content, brand, onContentChange, onOpenDesignHub }: CanvasEditorProps) {
-  const blocks = content.blocks || [];
+export default function CanvasEditor({ content, brand, onContentChange, onOpenDesignHub, selectedBlockId, onBlockSelect }: CanvasEditorProps) {
+  const blocks = useMemo(() => content.blocks || [], [content.blocks]);
   const emailWidth = content.emailWidth || 600;
 
   const [canvasTab, setCanvasTab] = useState<'blocks' | 'adsets'>('blocks');
-  const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
+  const [localActiveBlockId, setLocalActiveBlockId] = useState<string | null>(null);
+  const activeBlockId = selectedBlockId ?? localActiveBlockId;
   const [showPalette, setShowPalette] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
@@ -64,6 +67,11 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
 
   const brandId = brand?.id || '';
 
+  const selectBlock = useCallback((id: string | null) => {
+    setLocalActiveBlockId(id);
+    onBlockSelect?.(id);
+  }, [onBlockSelect]);
+
   // Load assets for the adsets library
   const refreshAdsets = useCallback(() => {
     if (!brandId) return;
@@ -74,12 +82,6 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
       .finally(() => setAdsetLoading(false));
   }, [brandId]);
 
-  useEffect(() => {
-    if (canvasTab === 'adsets') {
-      refreshAdsets();
-    }
-  }, [canvasTab, refreshAdsets]);
-
   // ============ Block manipulation ============
 
   const setBlocks = useCallback((newBlocks: BlockConfig[]) => {
@@ -89,14 +91,14 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
   const addBlock = useCallback((type: CanvasBlockType) => {
     const block = createDefaultBlock(type);
     setBlocks([...blocks, block]);
-    setActiveBlockId(block.id);
+    selectBlock(block.id);
     setShowPalette(false);
-  }, [blocks, setBlocks]);
+  }, [blocks, setBlocks, selectBlock]);
 
   const removeBlock = useCallback((id: string) => {
     setBlocks(blocks.filter(b => b.id !== id));
-    if (activeBlockId === id) setActiveBlockId(null);
-  }, [blocks, setBlocks, activeBlockId]);
+    if (activeBlockId === id) selectBlock(null);
+  }, [blocks, setBlocks, activeBlockId, selectBlock]);
 
   const moveBlock = useCallback((fromIdx: number, toIdx: number) => {
     if (fromIdx === toIdx) return;
@@ -113,8 +115,8 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
     const updated = [...blocks];
     updated.splice(idx + 1, 0, clone);
     setBlocks(updated);
-    setActiveBlockId(clone.id);
-  }, [blocks, setBlocks]);
+    selectBlock(clone.id);
+  }, [blocks, setBlocks, selectBlock]);
 
   const updateBlock = useCallback((id: string, updates: Partial<BlockConfig>) => {
     setBlocks(blocks.map(b => b.id === id ? { ...b, ...updates } as BlockConfig : b));
@@ -190,7 +192,7 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
     const newBlock = createDefaultBlock('hero');
     (newBlock as { imageUrl: string }).imageUrl = url;
     setBlocks([...blocks, newBlock]);
-    setActiveBlockId(newBlock.id);
+    selectBlock(newBlock.id);
   };
 
   // ============ Block editor form ============
@@ -416,6 +418,50 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
     }
   };
 
+  const renderStyleEditor = () => {
+    if (!activeBlock) return null;
+    const style = activeBlock.style || {};
+    const text = style.text || {};
+    const heading = style.heading || {};
+    const updateStyle = (patch: NonNullable<BlockConfig['style']>) => updateBlock(activeBlock.id, { style: { ...style, ...patch } });
+    const updateText = (patch: NonNullable<NonNullable<BlockConfig['style']>['text']>) => updateStyle({ text: { ...text, ...patch } });
+    const updateHeading = (patch: NonNullable<NonNullable<BlockConfig['style']>['heading']>) => updateStyle({ heading: { ...heading, ...patch } });
+
+    return (
+      <section className="inspector-style-section" aria-label="Estilo del bloque">
+        <div className="inspector-section-title">Estilo del bloque</div>
+        <div className="inspector-control-grid">
+          <label className="inspector-control">Fondo<input type="color" value={style.backgroundColor || content.bodyBgColor || '#ffffff'} onChange={event => updateStyle({ backgroundColor: event.target.value })} /></label>
+          <label className="inspector-control">Texto<input type="color" value={text.color || content.typography?.bodyColor || '#425466'} onChange={event => updateText({ color: event.target.value })} /></label>
+          <label className="inspector-control">Título<input type="color" value={heading.color || content.typography?.headingColor || '#10263a'} onChange={event => updateHeading({ color: event.target.value })} /></label>
+        </div>
+        <label className="inspector-field">Tipografía
+          <select className="form-select" value={text.fontFamily || content.typography?.bodyFont || 'Verdana'} onChange={event => updateText({ fontFamily: event.target.value })}>
+            {EMAIL_SAFE_FONTS.map(font => <option key={font} value={font}>{font}</option>)}
+          </select>
+        </label>
+        <label className="inspector-field">Tipografía de títulos
+          <select className="form-select" value={heading.fontFamily || content.typography?.headingFont || 'Arial'} onChange={event => updateHeading({ fontFamily: event.target.value })}>
+            {EMAIL_SAFE_FONTS.map(font => <option key={font} value={font}>{font}</option>)}
+          </select>
+        </label>
+        <div className="inspector-control-grid two">
+          <label className="inspector-field">Tamaño<input className="form-input" type="number" min={10} max={48} value={text.fontSize || 16} onChange={event => updateText({ fontSize: Number(event.target.value) })} /></label>
+          <label className="inspector-field">Tamaño título<input className="form-input" type="number" min={16} max={48} value={heading.fontSize || 26} onChange={event => updateHeading({ fontSize: Number(event.target.value) })} /></label>
+          <label className="inspector-field">Peso<select className="form-select" value={text.fontWeight || 400} onChange={event => updateText({ fontWeight: Number(event.target.value) as 400 | 500 | 600 | 700 | 800 })}>{[400, 500, 600, 700, 800].map(weight => <option key={weight}>{weight}</option>)}</select></label>
+          <label className="inspector-field">Alineación<select className="form-select" value={text.textAlign || 'left'} onChange={event => updateText({ textAlign: event.target.value as 'left' | 'center' | 'right' })}><option value="left">Izquierda</option><option value="center">Centro</option><option value="right">Derecha</option></select></label>
+          <label className="inspector-field">Interlineado<input className="form-input" type="number" min={1} max={2} step={0.1} value={text.lineHeight || 1.6} onChange={event => updateText({ lineHeight: Number(event.target.value) })} /></label>
+        </div>
+        <div className="inspector-section-title compact">Espaciado</div>
+        <div className="inspector-control-grid four">
+          {(['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'] as const).map((key, index) => (
+            <label className="inspector-field" key={key}>{['Arriba', 'Der.', 'Abajo', 'Izq.'][index]}<input className="form-input" type="number" min={0} max={80} value={style[key] ?? 8} onChange={event => updateStyle({ [key]: Number(event.target.value) })} /></label>
+          ))}
+        </div>
+      </section>
+    );
+  };
+
   // ============ Catalog info for labels ============
 
   const blockLabel = (type: CanvasBlockType) => {
@@ -457,7 +503,7 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
         <button
           type="button"
           className={`canvas-tab ${canvasTab === 'adsets' ? 'active' : ''}`}
-          onClick={() => setCanvasTab('adsets')}
+          onClick={() => { setCanvasTab('adsets'); refreshAdsets(); }}
         >
           🎨 Adsets
         </button>
@@ -497,7 +543,7 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
                 onDragOver={e => handleDragOver(e, index)}
                 onDrop={handleDrop}
                 onDragEnd={handleDragEnd}
-                onClick={() => setActiveBlockId(block.id === activeBlockId ? null : block.id)}
+                onClick={() => selectBlock(block.id === activeBlockId ? null : block.id)}
               >
                 <span className="block-handle">⠿</span>
                 <div className="block-header" style={{ paddingLeft: 16 }}>
@@ -536,6 +582,7 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
                 {activeBlockId === block.id && (
                   <div onClick={e => e.stopPropagation()}>
                     {renderBlockEditor()}
+                    {renderStyleEditor()}
                   </div>
                 )}
               </div>

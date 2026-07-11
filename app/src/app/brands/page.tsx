@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Building2, CheckCircle2, Copy, Download, ExternalLink, Plus, Search, Star, Trash2, Upload } from 'lucide-react';
+import Link from 'next/link';
+import { Building2, CheckCircle2, Copy, Download, ExternalLink, Mail, Plus, Search, Star, Trash2, Upload } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import BrandModal from '@/components/BrandModal';
 import {
@@ -267,6 +268,14 @@ function BrandsContent() {
 
                       {/* Hover Actions in container */}
                       <div style={{ display: 'flex', gap: 6 }}>
+                        <Link
+                          href={`/editor?brand=${encodeURIComponent(brand.id)}`}
+                          className="btn btn-secondary"
+                          onClick={event => event.stopPropagation()}
+                          title={`Crear email para ${brand.name}`}
+                          aria-label={`Crear email para ${brand.name}`}
+                          style={{ padding: 4, width: 28, height: 28, borderRadius: '6px' }}
+                        ><Mail size={14} /></Link>
                         <button
                           className="btn btn-secondary"
                           onClick={e => { e.stopPropagation(); handleDuplicate(brand.id); }}

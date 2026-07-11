@@ -320,14 +320,30 @@ function renderCTA(text: string, url: string, bgColor: string, fieldName: 'ctaTe
  * Render a single modular canvas block into email-compatible HTML.
  * Each block gets a data-editor-field attribute for interactive click-to-edit.
  */
-function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number): string {
-  const accent = brand.colors.accent;
-  const primary = brand.colors.primary;
-  const headingFont = brand.fonts.heading || 'Montserrat';
-  const bodyFont = brand.fonts.body || 'Montserrat';
-  const headerBg = brand.colors.headerBg || primary;
-  const footerBg = brand.colors.footerBg || primary;
+function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number, content: EmailContent): string {
+  const accent = content.accentColor || brand.colors.accent;
+  const primary = content.primaryColor || brand.colors.primary;
+  const headingFont = content.typography?.headingFont || brand.fonts.heading || 'Arial';
+  const bodyFont = content.typography?.bodyFont || brand.fonts.body || 'Verdana';
+  const headingColor = content.typography?.headingColor || primary;
+  const bodyColor = content.typography?.bodyColor || '#4a5568';
+  const mutedColor = content.typography?.mutedColor || '#9aa6b2';
+  const ctaTextColor = content.typography?.ctaTextColor || '#ffffff';
+  const headerBg = content.headerBgColor || brand.colors.headerBg || primary;
+  const footerBg = content.footerBgColor || brand.colors.footerBg || primary;
   const prefix = `block-${index}`;
+  const style = block.style || {};
+  const textStyle = style.text || {};
+  const headingStyle = style.heading || {};
+  const labelStyle = style.label || {};
+  const padding = `${style.paddingTop ?? 8}px ${style.paddingRight ?? 32}px ${style.paddingBottom ?? 8}px ${style.paddingLeft ?? 32}px`;
+  const surface = style.backgroundColor ? `background-color:${style.backgroundColor};` : '';
+  const textCss = (role: 'text' | 'heading' | 'label') => {
+    const value = role === 'heading' ? headingStyle : role === 'label' ? labelStyle : textStyle;
+    const defaultColor = role === 'heading' ? headingColor : role === 'label' ? accent : bodyColor;
+    const defaultFont = role === 'heading' ? headingFont : bodyFont;
+    return `font-family:'${value.fontFamily || defaultFont}',Arial,sans-serif;color:${value.color || defaultColor};font-size:${value.fontSize || (role === 'heading' ? 26 : role === 'label' ? 13 : 16)}px;font-weight:${value.fontWeight || (role === 'heading' || role === 'label' ? 800 : 400)};line-height:${value.lineHeight || (role === 'heading' ? 1.25 : 1.6)};text-align:${value.textAlign || 'left'};`;
+  };
 
   switch (block.type) {
     case 'header': {
@@ -336,13 +352,13 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number): str
       return `
 <!-- ====== BLOCK ${index}: HEADER ====== -->
 <tr>
-<td class="header-cell" data-editor-field="${prefix}" style="background-color:${headerBg};padding:26px 32px;text-align:center;" bgcolor="${headerBg}">
+<td class="header-cell" data-block-id="${block.id}" data-editor-field="${prefix}" style="background-color:${style.backgroundColor || headerBg};padding:${padding};text-align:center;" bgcolor="${style.backgroundColor || headerBg}">
   ${isImgLogo ? logoHtml : `<p class="header-logo-text" style="margin:0;font-family:${bodyFont},Geneva,sans-serif;font-size:26px;font-weight:700;">${logoHtml}</p>`}
 </td>
 </tr>
 <!-- GRADIENT BAR -->
 <tr>
-<td style="height:4px;background-color:${accent};background-image:linear-gradient(90deg,${brand.colors.gradientStart},${brand.colors.gradientEnd});line-height:4px;font-size:0;">&nbsp;</td>
+<td style="height:4px;background-color:${accent};background-image:linear-gradient(90deg,${content.gradientStart || brand.colors.gradientStart},${content.gradientEnd || brand.colors.gradientEnd});line-height:4px;font-size:0;">&nbsp;</td>
 </tr>`;
     }
 
@@ -350,25 +366,25 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number): str
       return renderHero({
         imageUrl: block.imageUrl, alt: block.alt, href: block.href, fullBleed: block.fullBleed,
         borderRadius: block.borderRadius, widthPercent: block.widthPercent,
-      }).replace('data-editor-field="hero"', `data-editor-field="${prefix}-imageUrl"`);
+      }).replace('data-editor-field="hero"', `data-block-id="${block.id}" data-editor-field="${prefix}-imageUrl"`);
     }
 
     case 'text': {
       const parts: string[] = [];
       if (block.label) {
-        parts.push(`<p data-editor-field="${prefix}-label" style="margin:0 0 6px;font-family:${bodyFont},Geneva,sans-serif;font-size:13px;color:${accent};font-weight:800;letter-spacing:1.5px;text-transform:uppercase;">${block.label}</p>`);
+        parts.push(`<p data-block-id="${block.id}" data-editor-field="${prefix}-label" style="margin:0 0 6px;${textCss('label')}letter-spacing:1.5px;text-transform:uppercase;">${block.label}</p>`);
       }
       if (block.headline) {
-        parts.push(`<h1 data-editor-field="${prefix}-headline" class="email-headline" style="margin:0 0 16px;font-family:'${headingFont}','Open Sans',Arial,sans-serif;color:${primary};font-size:26px;font-weight:800;line-height:1.25;">${block.headline}</h1>`);
+        parts.push(`<h1 data-block-id="${block.id}" data-editor-field="${prefix}-headline" class="email-headline" style="margin:0 0 16px;${textCss('heading')}">${block.headline}</h1>`);
       }
       if (block.body) {
-        parts.push(`<p data-editor-field="${prefix}-body" class="email-body-text" style="margin:0 0 18px;font-family:${bodyFont},Geneva,sans-serif;font-size:16px;line-height:1.6;color:#4a5568;">${block.body}</p>`);
+        parts.push(`<p data-block-id="${block.id}" data-editor-field="${prefix}-body" class="email-body-text" style="margin:0 0 18px;${textCss('text')}">${block.body}</p>`);
       }
       if (!parts.length) return '';
       return `
 <!-- ====== BLOCK ${index}: TEXT ====== -->
 <tr>
-<td class="email-body-cell" style="padding:24px 32px 16px;">
+<td class="email-body-cell" data-block-id="${block.id}" style="${surface}padding:${padding};">
   ${parts.join('\n  ')}
 </td>
 </tr>`;
@@ -386,7 +402,7 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number): str
       return `
 <!-- ====== BLOCK ${index}: IMAGE-TEXT ====== -->
 <tr>
-<td style="padding:8px 32px;" data-editor-field="${prefix}">
+<td style="${surface}padding:${padding};" data-block-id="${block.id}" data-editor-field="${prefix}">
   ${html}
 </td>
 </tr>`;
@@ -398,20 +414,20 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number): str
       return `
 <!-- ====== BLOCK ${index}: GALLERY ====== -->
 <tr>
-<td style="padding:8px 32px;" data-editor-field="${prefix}">
+<td style="${surface}padding:${padding};" data-block-id="${block.id}" data-editor-field="${prefix}">
   ${html}
 </td>
 </tr>`;
     }
 
     case 'bullets': {
-      const bulletsHtml = renderBullets(block.bullets || [], accent);
+      const bulletsHtml = (block.bullets || []).filter(Boolean).map(item => `<p class="bullet-text" style="margin:0 0 7px;${textCss('text')}"><span style="color:${accent};font-weight:800;">&#8226;</span>&nbsp; ${item}</p>`).join('');
       if (!bulletsHtml && !block.bulletsTitle) return '';
       return `
 <!-- ====== BLOCK ${index}: BULLETS ====== -->
 <tr>
-<td style="padding:8px 32px;" data-editor-field="${prefix}">
-  ${block.bulletsTitle ? `<p style="margin:0 0 10px;font-family:${bodyFont},Geneva,sans-serif;font-size:16px;color:${primary};font-weight:800;">${block.bulletsTitle}</p>` : ''}
+<td style="${surface}padding:${padding};" data-block-id="${block.id}" data-editor-field="${prefix}">
+  ${block.bulletsTitle ? `<p style="margin:0 0 10px;${textCss('heading')}">${block.bulletsTitle}</p>` : ''}
   ${bulletsHtml}
 </td>
 </tr>`;
@@ -423,7 +439,7 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number): str
       return `
 <!-- ====== BLOCK ${index}: INFOBOX ====== -->
 <tr>
-<td style="padding:8px 32px;" data-editor-field="${prefix}">
+<td style="${surface}padding:${padding};" data-block-id="${block.id}" data-editor-field="${prefix}">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${infoBoxBg};border:2px solid ${accent}33;border-radius:12px;">
   <tr>
   <td class="info-box-cell" style="padding:20px 24px;text-align:center;">
@@ -442,24 +458,24 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number): str
       return `
 <!-- ====== BLOCK ${index}: QUOTE ====== -->
 <tr>
-<td style="padding:8px 32px;" data-editor-field="${prefix}">
+<td style="${surface}padding:${padding};" data-block-id="${block.id}" data-editor-field="${prefix}">
   ${html}
 </td>
 </tr>`;
     }
 
     case 'cta': {
-      const ctaMain = renderCTA(block.ctaText, block.ctaUrl, accent, `${prefix}-ctaText`);
+      const ctaMain = renderCTA(block.ctaText, block.ctaUrl, accent, `${prefix}-ctaText`).replaceAll('color:#ffffff', `color:${ctaTextColor}`);
       const ctaSec = block.secondaryCtaText && block.secondaryCtaUrl
         ? renderCTA(block.secondaryCtaText, block.secondaryCtaUrl, primary, `${prefix}-secondaryCtaText`)
         : '';
       const preCta = block.preCta
-        ? `<p data-editor-field="${prefix}-preCta" class="pre-cta-text" style="margin:0 0 16px;font-family:${bodyFont},Geneva,sans-serif;font-size:16px;text-align:center;color:${primary};font-weight:700;">${block.preCta}</p>`
+        ? `<p data-block-id="${block.id}" data-editor-field="${prefix}-preCta" class="pre-cta-text" style="margin:0 0 16px;${textCss('text')}text-align:center;font-weight:700;">${block.preCta}</p>`
         : '';
       return `
 <!-- ====== BLOCK ${index}: CTA ====== -->
 <tr>
-<td style="padding:8px 32px;" data-editor-field="${prefix}">
+<td style="${surface}padding:${padding};" data-block-id="${block.id}" data-editor-field="${prefix}">
   ${preCta}
   ${ctaMain}
   ${ctaSec}
@@ -471,7 +487,7 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number): str
       return `
 <!-- ====== BLOCK ${index}: DIVIDER ====== -->
 <tr>
-<td style="padding:0 32px;" data-editor-field="${prefix}">
+<td style="${surface}padding:${padding};" data-block-id="${block.id}" data-editor-field="${prefix}">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px solid #e5eaf0;font-size:0;line-height:0;padding-top:20px;">&nbsp;</td></tr></table>
 </td>
 </tr>`;
@@ -482,7 +498,7 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number): str
       return `
 <!-- ====== BLOCK ${index}: SPACER ====== -->
 <tr>
-<td style="height:${h}px;font-size:0;line-height:0;" data-editor-field="${prefix}">&nbsp;</td>
+<td style="height:${h}px;font-size:0;line-height:0;${surface}" data-block-id="${block.id}" data-editor-field="${prefix}">&nbsp;</td>
 </tr>`;
     }
 
@@ -492,13 +508,13 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number): str
       return `
 <!-- ====== BLOCK ${index}: FOOTER ====== -->
 <tr>
-<td class="footer-cell" style="background:${footerBg};padding:22px 32px;text-align:center;" data-editor-field="${prefix}">
+<td class="footer-cell" style="background:${style.backgroundColor || footerBg};padding:${padding};text-align:center;" data-block-id="${block.id}" data-editor-field="${prefix}">
   ${brand.footer.tagline ? `<p class="footer-tagline" style="margin:0 0 4px;font-family:${bodyFont},Geneva,sans-serif;font-size:16px;color:#ffffff;font-weight:700;">${brand.footer.tagline}</p>` : ''}
   <p class="footer-subtitle" style="margin:0;font-family:${bodyFont},Geneva,sans-serif;font-size:14px;">
     ${ftLogoHtml}
     ${brand.footer.subtitle ? `<span style="color:#8ba0b8;"> · ${brand.footer.subtitle}</span>` : ''}
   </p>
-  ${block.footerNote ? `<p class="footer-note-text" style="margin:8px 0 0;font-family:${bodyFont},Geneva,sans-serif;font-size:14px;text-align:center;color:#9aa6b2;">${block.footerNote}</p>` : ''}
+  ${block.footerNote ? `<p class="footer-note-text" style="margin:8px 0 0;font-family:${bodyFont},Geneva,sans-serif;font-size:14px;text-align:center;color:${mutedColor};">${block.footerNote}</p>` : ''}
   ${brand.footer.address ? `<p style="margin:12px 0 0;font-family:${bodyFont},Geneva,sans-serif;font-size:11px;line-height:1.5;color:#8ba0b8;">${brand.footer.address}</p>` : ''}
   ${brand.footer.unsubscribeUrl ? `<p style="margin:8px 0 0;font-family:${bodyFont},Geneva,sans-serif;font-size:11px;"><a href="${brand.footer.unsubscribeUrl}" style="color:#b9c7d6;text-decoration:underline;">${brand.footer.unsubscribeLabel || 'Cancelar suscripción'}</a></p>` : ''}
 </td>
@@ -521,12 +537,12 @@ ${brand.footer.disclaimer ? `
  */
 function renderCanvasEmail(brand: Brand, content: EmailContent): string {
   const emailWidth = content.emailWidth || 600;
-  const headingFont = brand.fonts.heading || 'Montserrat';
-  const bodyFont = brand.fonts.body || 'Montserrat';
+  const headingFont = content.typography?.headingFont || brand.fonts.heading || 'Arial';
+  const bodyFont = content.typography?.bodyFont || brand.fonts.body || 'Verdana';
   const pageBackground = content.emailBgColor || '#eef2f6';
   const bodyBackground = content.bodyBgColor || '#ffffff';
 
-  const blocksHtml = (content.blocks || []).map((b, i) => renderCanvasBlock(b, brand, i)).join('\n');
+  const blocksHtml = (content.blocks || []).map((b, i) => renderCanvasBlock(b, brand, i, content)).join('\n');
 
   return `<!DOCTYPE html>
 <html lang="es" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">

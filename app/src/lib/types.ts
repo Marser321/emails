@@ -25,6 +25,39 @@ export interface BrandFonts {
   body: string;
 }
 
+export type EmailTextAlign = 'left' | 'center' | 'right';
+export type EmailFontWeight = 400 | 500 | 600 | 700 | 800;
+
+export interface TextStyle {
+  color?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: EmailFontWeight;
+  lineHeight?: number;
+  textAlign?: EmailTextAlign;
+}
+
+export interface BlockStyle {
+  backgroundColor?: string;
+  paddingTop?: number;
+  paddingRight?: number;
+  paddingBottom?: number;
+  paddingLeft?: number;
+  text?: TextStyle;
+  label?: TextStyle;
+  heading?: TextStyle;
+}
+
+export interface EmailTypography {
+  headingFont: string;
+  bodyFont: string;
+  headingColor: string;
+  bodyColor: string;
+  mutedColor: string;
+  linkColor: string;
+  ctaTextColor: string;
+}
+
 export interface BrandLogo {
   type: 'text' | 'image';
   // For text logos: "PART1|PART2" where PART1 is white and PART2 is accent color
@@ -114,6 +147,7 @@ export type CanvasBlockType =
 interface BlockBase {
   id: string;
   type: CanvasBlockType;
+  style?: BlockStyle;
 }
 
 export interface HeaderBlockConfig extends BlockBase {
@@ -251,6 +285,14 @@ export interface EmailContent {
   footerNote: string;
   emailBgColor?: string;
   bodyBgColor?: string;
+  primaryColor?: string;
+  accentColor?: string;
+  gradientStart?: string;
+  gradientEnd?: string;
+  headerBgColor?: string;
+  footerBgColor?: string;
+  presetId?: TemplatePresetId;
+  typography?: Partial<EmailTypography>;
   textureUrl?: string;
   headerTextureUrl?: string;
   secondaryCtaText?: string;
@@ -293,6 +335,28 @@ export interface EmailDocumentV3 {
   compliance: EmailCompliance;
 }
 
+export interface EmailDocumentV4 {
+  schemaVersion: 4;
+  brandId: string;
+  template: TemplateType;
+  presetId: TemplatePresetId;
+  subject: string;
+  preheader: string;
+  locale: 'es';
+  emailWidth: number;
+  theme: EmailTheme & {
+    typography: EmailTypography;
+    primaryColor: string;
+    accentColor: string;
+    gradientStart: string;
+    gradientEnd: string;
+    headerBackground: string;
+    footerBackground: string;
+  };
+  blocks: BlockConfig[];
+  compliance: EmailCompliance;
+}
+
 export type TemplateType = 
   | 'masterclass'
   | 'registration'
@@ -310,6 +374,27 @@ export interface TemplateConfig {
   description: string;
   defaultContent: Partial<EmailContent>;
   defaultLayout?: LayoutVariant;
+}
+
+export type TemplatePresetId =
+  | 'keynote' | 'workshop'
+  | 'confirmation' | 'access-pass'
+  | 'personal-note' | 'next-steps'
+  | 'offer-focus' | 'promo-grid'
+  | 'countdown' | 'calendar-card'
+  | 'editorial-digest' | 'visual-roundup'
+  | 'product-story' | 'single-offer'
+  | 'market-brief' | 'portfolio-review'
+  | 'welcome-path' | 'getting-started';
+
+export interface TemplatePreset {
+  id: TemplatePresetId;
+  objective: TemplateType;
+  name: string;
+  description: string;
+  variant: string;
+  thumbnail: string;
+  defaultContent: EmailContent;
 }
 
 // Registro del historial de emails generados (data/history/<brandId>.json)

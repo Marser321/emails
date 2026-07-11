@@ -1,4 +1,6 @@
-import type { BlockConfig, Brand, EmailContent } from './types';
+import type { BlockConfig, BlockStyle, Brand, EmailContent, TextStyle } from './types';
+
+export const EMAIL_SAFE_FONTS = ['Arial', 'Georgia', 'Tahoma', 'Trebuchet MS', 'Verdana'] as const;
 
 export function escapeHtml(value: string): string {
   return value
@@ -37,6 +39,30 @@ export function sanitizeFont(value: string | undefined, fallback: string): strin
   return /^[a-z0-9 -]{1,48}$/i.test(font) ? escapeHtml(font) : fallback;
 }
 
+function sanitizeTextStyle(style: TextStyle | undefined): TextStyle | undefined {
+  if (!style) return undefined;
+  const family = EMAIL_SAFE_FONTS.includes(style.fontFamily as typeof EMAIL_SAFE_FONTS[number]) ? style.fontFamily : undefined;
+  const weights = [400, 500, 600, 700, 800] as const;
+  return {
+    color: style.color ? sanitizeColor(style.color, '#425466') : undefined,
+    fontFamily: family,
+    fontSize: clampOpt(style.fontSize, 10, 48),
+    fontWeight: weights.includes(style.fontWeight as typeof weights[number]) ? style.fontWeight : undefined,
+    lineHeight: typeof style.lineHeight === 'number' ? Math.min(2, Math.max(1, Math.round(style.lineHeight * 10) / 10)) : undefined,
+    textAlign: ['left', 'center', 'right'].includes(style.textAlign || '') ? style.textAlign : undefined,
+  };
+}
+
+function sanitizeBlockStyle(style: BlockStyle | undefined): BlockStyle | undefined {
+  if (!style) return undefined;
+  return {
+    backgroundColor: style.backgroundColor ? sanitizeColor(style.backgroundColor, '#ffffff') : undefined,
+    paddingTop: clampOpt(style.paddingTop, 0, 80), paddingRight: clampOpt(style.paddingRight, 0, 80),
+    paddingBottom: clampOpt(style.paddingBottom, 0, 80), paddingLeft: clampOpt(style.paddingLeft, 0, 80),
+    text: sanitizeTextStyle(style.text), label: sanitizeTextStyle(style.label), heading: sanitizeTextStyle(style.heading),
+  };
+}
+
 // Clamp numérico que preserva undefined (los defaults viven en templates.ts)
 export function clampOpt(value: number | undefined, min: number, max: number): number | undefined {
   return typeof value === 'number' && Number.isFinite(value)
@@ -45,47 +71,48 @@ export function clampOpt(value: number | undefined, min: number, max: number): n
 }
 
 function sanitizeBlock(block: BlockConfig): BlockConfig {
+  const style = sanitizeBlockStyle(block.style);
   switch (block.type) {
     case 'hero':
       return {
-        ...block, id: escapeHtml(block.id), imageUrl: sanitizeEmailUrl(block.imageUrl), alt: escapeHtml(block.alt || ''), href: sanitizeEmailUrl(block.href),
+        ...block, style, id: escapeHtml(block.id), imageUrl: sanitizeEmailUrl(block.imageUrl), alt: escapeHtml(block.alt || ''), href: sanitizeEmailUrl(block.href),
         borderRadius: clampOpt(block.borderRadius, 0, 32), widthPercent: clampOpt(block.widthPercent, 30, 100),
       };
     case 'text':
-      return { ...block, id: escapeHtml(block.id), label: escapeHtml(block.label || ''), headline: escapeHtml(block.headline || ''), body: escapeTextWithBreaks(block.body || '') };
+      return { ...block, style, id: escapeHtml(block.id), label: escapeHtml(block.label || ''), headline: escapeHtml(block.headline || ''), body: escapeTextWithBreaks(block.body || '') };
     case 'image-text':
       return {
-        ...block, id: escapeHtml(block.id), imageUrl: sanitizeEmailUrl(block.imageUrl), alt: escapeHtml(block.alt || ''), title: escapeHtml(block.title || ''), text: escapeTextWithBreaks(block.text || ''),
+        ...block, style, id: escapeHtml(block.id), imageUrl: sanitizeEmailUrl(block.imageUrl), alt: escapeHtml(block.alt || ''), title: escapeHtml(block.title || ''), text: escapeTextWithBreaks(block.text || ''),
         borderRadius: clampOpt(block.borderRadius, 0, 32), imageWidth: clampOpt(block.imageWidth, 120, 252),
       };
     case 'gallery':
       return {
         ...block,
-        id: escapeHtml(block.id),
+        id: escapeHtml(block.id), style,
         caption: escapeHtml(block.caption || ''),
         images: block.images.map(image => ({ url: sanitizeEmailUrl(image.url), alt: escapeHtml(image.alt || ''), href: sanitizeEmailUrl(image.href) })),
         borderRadius: clampOpt(block.borderRadius, 0, 32),
       };
     case 'bullets':
-      return { ...block, id: escapeHtml(block.id), bulletsTitle: escapeHtml(block.bulletsTitle || ''), bullets: block.bullets.map(escapeHtml) };
+      return { ...block, style, id: escapeHtml(block.id), bulletsTitle: escapeHtml(block.bulletsTitle || ''), bullets: block.bullets.map(escapeHtml) };
     case 'infobox':
-      return { ...block, id: escapeHtml(block.id), eventDate: escapeHtml(block.eventDate || ''), eventTime: escapeHtml(block.eventTime || '') };
+      return { ...block, style, id: escapeHtml(block.id), eventDate: escapeHtml(block.eventDate || ''), eventTime: escapeHtml(block.eventTime || '') };
     case 'quote':
-      return { ...block, id: escapeHtml(block.id), text: escapeTextWithBreaks(block.text || ''), author: escapeHtml(block.author || ''), role: escapeHtml(block.role || '') };
+      return { ...block, style, id: escapeHtml(block.id), text: escapeTextWithBreaks(block.text || ''), author: escapeHtml(block.author || ''), role: escapeHtml(block.role || '') };
     case 'cta':
       return {
-        ...block,
+        ...block, style,
         id: escapeHtml(block.id),
         ctaText: escapeHtml(block.ctaText || ''), ctaUrl: sanitizeEmailUrl(block.ctaUrl),
         preCta: escapeHtml(block.preCta || ''), secondaryCtaText: escapeHtml(block.secondaryCtaText || ''),
         secondaryCtaUrl: sanitizeEmailUrl(block.secondaryCtaUrl),
       };
     case 'footer':
-      return { ...block, id: escapeHtml(block.id), footerNote: escapeHtml(block.footerNote || '') };
+      return { ...block, style, id: escapeHtml(block.id), footerNote: escapeHtml(block.footerNote || '') };
     case 'spacer':
-      return { ...block, id: escapeHtml(block.id), height: Math.min(80, Math.max(4, block.height || 20)) };
+      return { ...block, style, id: escapeHtml(block.id), height: Math.min(80, Math.max(4, block.height || 20)) };
     default:
-      return { ...block, id: escapeHtml(block.id) };
+      return { ...block, style, id: escapeHtml(block.id) };
   }
 }
 
@@ -140,6 +167,22 @@ export function sanitizeContentForEmail(input: EmailContent): EmailContent {
     footerNote: escapeHtml(input.footerNote || ''),
     emailBgColor: sanitizeColor(input.emailBgColor, '#eef2f6'),
     bodyBgColor: sanitizeColor(input.bodyBgColor, '#ffffff'),
+    primaryColor: sanitizeColor(input.primaryColor, '#0b2a4a'),
+    accentColor: sanitizeColor(input.accentColor, '#2979b8'),
+    gradientStart: sanitizeColor(input.gradientStart, '#2979b8'),
+    gradientEnd: sanitizeColor(input.gradientEnd, '#1b6fc4'),
+    headerBgColor: sanitizeColor(input.headerBgColor, input.primaryColor || '#0b2a4a'),
+    footerBgColor: sanitizeColor(input.footerBgColor, input.primaryColor || '#0b2a4a'),
+    presetId: input.presetId,
+    typography: input.typography ? {
+      headingFont: sanitizeFont(input.typography.headingFont, 'Arial'),
+      bodyFont: sanitizeFont(input.typography.bodyFont, 'Verdana'),
+      headingColor: sanitizeColor(input.typography.headingColor, '#10263a'),
+      bodyColor: sanitizeColor(input.typography.bodyColor, '#425466'),
+      mutedColor: sanitizeColor(input.typography.mutedColor, '#7a8792'),
+      linkColor: sanitizeColor(input.typography.linkColor, '#147ca8'),
+      ctaTextColor: sanitizeColor(input.typography.ctaTextColor, '#ffffff'),
+    } : undefined,
     textureUrl: sanitizeEmailUrl(input.textureUrl),
     headerTextureUrl: sanitizeEmailUrl(input.headerTextureUrl),
     secondaryCtaText: escapeHtml(input.secondaryCtaText || ''),

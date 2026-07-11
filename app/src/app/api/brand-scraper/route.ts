@@ -52,8 +52,6 @@ export async function POST(req: Request) {
     }
 
     // 5. Preprocesamiento básico de HTML (Sin librerías externas)
-    const baseUrl = new URL(url).origin;
-
     // Helper para resolver URLs relativas
     const resolveUrl = (relativeUrl: string): string => {
       if (!relativeUrl) return '';

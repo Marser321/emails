@@ -97,7 +97,7 @@ export async function addHistoryEntry(entry: Omit<EmailHistoryEntry, 'id' | 'cre
     engine: full.engine, model: full.model, prompt: full.prompt || null,
     subject: full.subject, content: full.content, html_snapshot: full.htmlSnapshot || null,
     rating: full.rating, notes: full.notes || null, created_at: full.createdAt, updated_at: full.updatedAt,
-    created_by: createdBy || null, schema_version: 3,
+    created_by: createdBy || null, schema_version: 4,
   });
   if (error) throw new Error(error.message);
   return full;
