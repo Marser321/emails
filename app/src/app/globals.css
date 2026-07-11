@@ -1207,7 +1207,7 @@ select:focus-visible {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   margin-bottom: 12px;
-  overflow: hidden;
+  /* overflow: hidden removed to allow dropdowns (AI menu) to overflow */
   transition: all var(--transition-fast);
 }
 
