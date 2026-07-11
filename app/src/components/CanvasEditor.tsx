@@ -223,6 +223,27 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
       </div>
     );
 
+    // Slider numérico con valor visible (para radios/anchos de imagen)
+    const styleSlider = (label: string, value: number, min: number, max: number, unit: string, onChange: (v: number) => void) =>
+      fieldGroup(label,
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="range"
+            min={min}
+            max={max}
+            value={value}
+            onChange={e => {
+              const v = parseInt(e.target.value);
+              if (!Number.isNaN(v)) onChange(v);
+            }}
+            style={{ flex: 1, accentColor: 'var(--accent)' }}
+          />
+          <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-secondary)', minWidth: 46, textAlign: 'right' }}>
+            {value}{unit}
+          </span>
+        </div>
+      );
+
     switch (activeBlock.type) {
       case 'header':
         return (
@@ -239,10 +260,12 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
             {fieldGroup('URL de Imagen', <input className="form-input" value={activeBlock.imageUrl} onChange={e => updateBlock(activeBlock.id, { imageUrl: e.target.value })} placeholder="https://..." />)}
             {fieldGroup('Alt Text', <input className="form-input" value={activeBlock.alt || ''} onChange={e => updateBlock(activeBlock.id, { alt: e.target.value })} placeholder="Descripción de imagen" />)}
             {fieldGroup('Link (opcional)', <input className="form-input" value={activeBlock.href || ''} onChange={e => updateBlock(activeBlock.id, { href: e.target.value })} placeholder="https://..." />)}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', marginBottom: 10 }}>
               <input type="checkbox" checked={activeBlock.fullBleed || false} onChange={e => updateBlock(activeBlock.id, { fullBleed: e.target.checked })} />
               Full bleed (sin padding)
             </label>
+            {styleSlider('Radio de esquinas', activeBlock.borderRadius ?? 0, 0, 32, 'px', v => updateBlock(activeBlock.id, { borderRadius: v }))}
+            {styleSlider('Ancho de la imagen', activeBlock.widthPercent ?? 100, 30, 100, '%', v => updateBlock(activeBlock.id, { widthPercent: v }))}
           </div>
         );
 
@@ -261,7 +284,7 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
             {fieldGroup('URL de Imagen', <input className="form-input" value={activeBlock.imageUrl} onChange={e => updateBlock(activeBlock.id, { imageUrl: e.target.value })} placeholder="https://..." />)}
             {fieldGroup('Título', <input className="form-input" value={activeBlock.title || ''} onChange={e => updateBlock(activeBlock.id, { title: e.target.value })} />)}
             {fieldGroup('Texto', <textarea className="form-input" style={{ minHeight: 60, resize: 'vertical' }} value={activeBlock.text} onChange={e => updateBlock(activeBlock.id, { text: e.target.value })} />)}
-            {fieldGroup('Posición Imagen', 
+            {fieldGroup('Posición Imagen',
               <div style={{ display: 'flex', gap: 8 }}>
                 {(['left', 'right'] as const).map(pos => (
                   <button key={pos} type="button" onClick={() => updateBlock(activeBlock.id, { imagePosition: pos })} style={{ flex: 1, padding: '6px 10px', border: '1px solid var(--border-subtle)', borderRadius: 6, background: activeBlock.imagePosition === pos ? 'var(--accent)' : 'var(--bg-tertiary)', color: activeBlock.imagePosition === pos ? '#fff' : 'var(--text-secondary)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
@@ -270,6 +293,8 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
                 ))}
               </div>
             )}
+            {styleSlider('Radio de esquinas', activeBlock.borderRadius ?? 8, 0, 32, 'px', v => updateBlock(activeBlock.id, { borderRadius: v }))}
+            {styleSlider('Ancho de la imagen', activeBlock.imageWidth ?? 252, 120, 252, 'px', v => updateBlock(activeBlock.id, { imageWidth: v }))}
           </div>
         );
 
@@ -286,6 +311,7 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
               </div>
             )}
             {fieldGroup('Caption', <input className="form-input" value={activeBlock.caption || ''} onChange={e => updateBlock(activeBlock.id, { caption: e.target.value })} />)}
+            {styleSlider('Radio de esquinas', activeBlock.borderRadius ?? 8, 0, 32, 'px', v => updateBlock(activeBlock.id, { borderRadius: v }))}
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
               📸 Usá la pestaña Adsets para agregar imágenes a la galería.
             </div>

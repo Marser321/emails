@@ -37,20 +37,34 @@ export function sanitizeFont(value: string | undefined, fallback: string): strin
   return /^[a-z0-9 -]{1,48}$/i.test(font) ? escapeHtml(font) : fallback;
 }
 
+// Clamp numérico que preserva undefined (los defaults viven en templates.ts)
+export function clampOpt(value: number | undefined, min: number, max: number): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(max, Math.max(min, Math.round(value)))
+    : undefined;
+}
+
 function sanitizeBlock(block: BlockConfig): BlockConfig {
   switch (block.type) {
     case 'hero':
-      return { ...block, id: escapeHtml(block.id), imageUrl: sanitizeEmailUrl(block.imageUrl), alt: escapeHtml(block.alt || ''), href: sanitizeEmailUrl(block.href) };
+      return {
+        ...block, id: escapeHtml(block.id), imageUrl: sanitizeEmailUrl(block.imageUrl), alt: escapeHtml(block.alt || ''), href: sanitizeEmailUrl(block.href),
+        borderRadius: clampOpt(block.borderRadius, 0, 32), widthPercent: clampOpt(block.widthPercent, 30, 100),
+      };
     case 'text':
       return { ...block, id: escapeHtml(block.id), label: escapeHtml(block.label || ''), headline: escapeHtml(block.headline || ''), body: escapeTextWithBreaks(block.body || '') };
     case 'image-text':
-      return { ...block, id: escapeHtml(block.id), imageUrl: sanitizeEmailUrl(block.imageUrl), alt: escapeHtml(block.alt || ''), title: escapeHtml(block.title || ''), text: escapeTextWithBreaks(block.text || '') };
+      return {
+        ...block, id: escapeHtml(block.id), imageUrl: sanitizeEmailUrl(block.imageUrl), alt: escapeHtml(block.alt || ''), title: escapeHtml(block.title || ''), text: escapeTextWithBreaks(block.text || ''),
+        borderRadius: clampOpt(block.borderRadius, 0, 32), imageWidth: clampOpt(block.imageWidth, 120, 252),
+      };
     case 'gallery':
       return {
         ...block,
         id: escapeHtml(block.id),
         caption: escapeHtml(block.caption || ''),
         images: block.images.map(image => ({ url: sanitizeEmailUrl(image.url), alt: escapeHtml(image.alt || ''), href: sanitizeEmailUrl(image.href) })),
+        borderRadius: clampOpt(block.borderRadius, 0, 32),
       };
     case 'bullets':
       return { ...block, id: escapeHtml(block.id), bulletsTitle: escapeHtml(block.bulletsTitle || ''), bullets: block.bullets.map(escapeHtml) };
@@ -133,15 +147,18 @@ export function sanitizeContentForEmail(input: EmailContent): EmailContent {
     emailWidth: Math.min(700, Math.max(320, input.emailWidth || 600)),
     hero: input.hero ? {
       ...input.hero, imageUrl: sanitizeEmailUrl(input.hero.imageUrl), alt: escapeHtml(input.hero.alt || ''), href: sanitizeEmailUrl(input.hero.href),
+      borderRadius: clampOpt(input.hero.borderRadius, 0, 32), widthPercent: clampOpt(input.hero.widthPercent, 30, 100),
     } : undefined,
     imageText: input.imageText ? {
       ...input.imageText, imageUrl: sanitizeEmailUrl(input.imageText.imageUrl), alt: escapeHtml(input.imageText.alt || ''),
       title: escapeHtml(input.imageText.title || ''), text: escapeTextWithBreaks(input.imageText.text || ''),
+      borderRadius: clampOpt(input.imageText.borderRadius, 0, 32), imageWidth: clampOpt(input.imageText.imageWidth, 120, 252),
     } : undefined,
     gallery: input.gallery ? {
       ...input.gallery, caption: escapeHtml(input.gallery.caption || ''), images: input.gallery.images.map(image => ({
         url: sanitizeEmailUrl(image.url), alt: escapeHtml(image.alt || ''), href: sanitizeEmailUrl(image.href),
       })),
+      borderRadius: clampOpt(input.gallery.borderRadius, 0, 32),
     } : undefined,
     quote: input.quote ? {
       ...input.quote, text: escapeTextWithBreaks(input.quote.text || ''), author: escapeHtml(input.quote.author || ''), role: escapeHtml(input.quote.role || ''),

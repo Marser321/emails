@@ -97,6 +97,40 @@ const COLOR_PALETTES = [
   }
 ];
 
+// Formatos de banner: el canvas y el PNG exportado usan estas dimensiones
+const BANNER_FORMATS = {
+  panoramic: { width: 1200, height: 600, label: 'Panorámico', hint: '1200×600' },
+  standard: { width: 1200, height: 800, label: 'Estándar', hint: '1200×800' },
+  square: { width: 1080, height: 1080, label: 'Cuadrado', hint: '1080×1080' },
+} as const;
+type BannerFormat = keyof typeof BANNER_FORMATS;
+
+// Elementos interactivos del banner (clic para seleccionar, arrastrar para mover)
+type BannerElementId = 'title' | 'subtitle' | 'cta' | 'badge' | 'brandTag';
+
+const ELEMENT_LABELS: Record<BannerElementId, string> = {
+  title: 'Título', subtitle: 'Subtítulo', cta: 'Botón CTA', badge: 'Badge de descuento', brandTag: 'Etiqueta de marca',
+};
+
+// Rango de tamaño de fuente permitido por elemento
+const FONT_LIMITS: Record<BannerElementId, [number, number]> = {
+  title: [24, 120], subtitle: [16, 48], cta: [14, 40], badge: [60, 180], brandTag: [14, 40],
+};
+
+interface ElementStyle {
+  dx: number;
+  dy: number;
+  fontSize?: number;
+  btnWidth?: number;  // solo 'cta'
+  btnHeight?: number; // solo 'cta'
+  btnRadius?: number; // solo 'cta'
+}
+
+interface ElementBox { id: BannerElementId; x: number; y: number; w: number; h: number }
+
+// Offsets/tamaños por elemento, agrupados por `${layout}:${formato}`
+type StyleMap = Record<string, Partial<Record<BannerElementId, ElementStyle>>>;
+
 // Preset background image suggestions for the Adset Generator (Unsplash premium curations)
 const BANNER_BG_PRESETS = [
   { name: 'Finanzas & Crecimiento', url: 'https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=600&auto=format&fit=crop&q=80' },
@@ -202,6 +236,36 @@ export default function VisualDesignHub({
   const [overlayOpacity, setOverlayOpacity] = useState(0.6);
   const [isGeneratingBanner, setIsGeneratingBanner] = useState(false);
 
+  // === CANVAS INTERACTIVO ===
+  const [bannerFormat, setBannerFormat] = useState<BannerFormat>('standard');
+  const [elementStyles, setElementStyles] = useState<StyleMap>({});
+  const [selectedElement, setSelectedElement] = useState<BannerElementId | null>(null);
+  const hitBoxesRef = useRef<ElementBox[]>([]);
+  const dragRef = useRef<{
+    id: BannerElementId; startX: number; startY: number;
+    origDx: number; origDy: number; startCenterX: number; startCenterY: number;
+  } | null>(null);
+  const bgImageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const drawBannerRef = useRef<() => void>(() => {});
+
+  const styleKey = `${bannerLayout}:${bannerFormat}`;
+
+  const updateElementStyle = (id: BannerElementId, patch: Partial<ElementStyle>) => {
+    setElementStyles(prev => {
+      const group = prev[styleKey] ?? {};
+      const current = group[id] ?? { dx: 0, dy: 0 };
+      return { ...prev, [styleKey]: { ...group, [id]: { ...current, ...patch } } };
+    });
+  };
+
+  const resetElementStyle = (id: BannerElementId) => {
+    setElementStyles(prev => {
+      const group = { ...(prev[styleKey] ?? {}) };
+      delete group[id];
+      return { ...prev, [styleKey]: group };
+    });
+  };
+
   // Sincronizar colores cuando cambia la marca o el contenido (ajuste durante render,
   // ver react.dev "adjusting state when a prop changes")
   const [prevBrand, setPrevBrand] = useState(brand);
@@ -270,20 +334,33 @@ export default function VisualDesignHub({
   };
 
   // === RENDERIZACIÓN DEL BANNER CANVAS ===
-  const drawBanner = useCallback(() => {
+  const drawBanner = useCallback((opts?: { forExport?: boolean }) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Dimensiones de diseño
-    const width = 1200;
-    const height = 800;
+    // Dimensiones según formato seleccionado
+    const { width, height } = BANNER_FORMATS[bannerFormat];
     canvas.width = width;
     canvas.height = height;
 
     // Limpiar canvas
     ctx.clearRect(0, 0, width, height);
+
+    // Offsets/tamaños por elemento para este layout+formato
+    const styles = elementStyles[styleKey] ?? {};
+    const off = (id: BannerElementId): ElementStyle => ({ dx: 0, dy: 0, ...styles[id] });
+
+    // Cajas de hit-testing registradas durante el dibujo
+    const boxes: ElementBox[] = [];
+    const registerText = (id: BannerElementId, drawX: number, baselineY: number, fontPx: number, text: string, align: 'center' | 'left') => {
+      const m = ctx.measureText(text);
+      const ascent = m.actualBoundingBoxAscent || fontPx * 0.8;
+      const descent = m.actualBoundingBoxDescent || fontPx * 0.25;
+      const x = align === 'center' ? drawX - m.width / 2 : drawX;
+      boxes.push({ id, x, y: baselineY - ascent, w: m.width, h: ascent + descent });
+    };
 
     const renderTextAndDecorations = () => {
       // Dibujar overlay sutil (círculos abstractos decorativos de la marca)
@@ -297,25 +374,36 @@ export default function VisualDesignHub({
         ctx.fill();
       }
 
-      // Dibujar contenidos basados en Layout
+      // Dibujar contenidos basados en Layout (posiciones proporcionales al formato)
       if (bannerLayout === 'promo') {
         // Título del banner
+        const t = off('title');
+        const titleFs = t.fontSize ?? 48;
         ctx.fillStyle = primaryColor;
-        ctx.font = '800 48px sans-serif';
+        ctx.font = `800 ${titleFs}px sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText(bannerTitle, width / 2, height / 2 - 80);
+        const titleX = width / 2 + t.dx;
+        const titleY = height * 0.4 + t.dy;
+        ctx.fillText(bannerTitle, titleX, titleY);
+        registerText('title', titleX, titleY, titleFs, bannerTitle, 'center');
 
         // Subtítulo
+        const s = off('subtitle');
+        const subFs = s.fontSize ?? 28;
         ctx.fillStyle = getRelativeLuminance(bodyBgColor) < 0.5 ? '#e4e4e7' : '#4b5563';
-        ctx.font = '500 28px sans-serif';
-        ctx.fillText(bannerSubtitle, width / 2, height / 2 - 10);
+        ctx.font = `500 ${subFs}px sans-serif`;
+        const subX = width / 2 + s.dx;
+        const subY = height * 0.4875 + s.dy;
+        ctx.fillText(bannerSubtitle, subX, subY);
+        registerText('subtitle', subX, subY, subFs, bannerSubtitle, 'center');
 
         // Botón CTA falso
-        const btnWidth = 440;
-        const btnHeight = 84;
-        const btnX = (width - btnWidth) / 2;
-        const btnY = height / 2 + 80;
-        const btnRadius = 14;
+        const c = off('cta');
+        const btnWidth = c.btnWidth ?? 440;
+        const btnHeight = c.btnHeight ?? 84;
+        const btnRadius = c.btnRadius ?? 14;
+        const btnX = (width - btnWidth) / 2 + c.dx;
+        const btnY = height * 0.6 + c.dy;
 
         ctx.fillStyle = accentColor;
         ctx.beginPath();
@@ -325,53 +413,77 @@ export default function VisualDesignHub({
         // Texto del botón CTA falso
         const useBlackText = getContrastRatio('#000000', accentColor) > getContrastRatio('#ffffff', accentColor);
         ctx.fillStyle = useBlackText ? '#000000' : '#ffffff';
-        ctx.font = '700 26px sans-serif';
-        ctx.fillText(bannerCtaText, width / 2, btnY + 52);
-      } 
+        const ctaFs = c.fontSize ?? 26;
+        ctx.font = `700 ${ctaFs}px sans-serif`;
+        ctx.fillText(bannerCtaText, btnX + btnWidth / 2, btnY + btnHeight / 2 + ctaFs * 0.35);
+        boxes.push({ id: 'cta', x: btnX, y: btnY, w: btnWidth, h: btnHeight });
+      }
       else if (bannerLayout === 'minimal') {
         // Estilo sofisticado asimétrico
         ctx.textAlign = 'left';
-        
-        // Brand tag
-        ctx.fillStyle = accentColor;
-        ctx.font = '800 24px sans-serif';
-        ctx.fillText((brand?.name || 'AD MEDIA').toUpperCase(), 120, 180);
+        const marginX = Math.round(width * 0.1);
 
-        // Título
+        // Brand tag
+        const bt = off('brandTag');
+        const btFs = bt.fontSize ?? 24;
+        ctx.fillStyle = accentColor;
+        ctx.font = `800 ${btFs}px sans-serif`;
+        const brandText = (brand?.name || 'AD MEDIA').toUpperCase();
+        const btX = marginX + bt.dx;
+        const btY = height * 0.225 + bt.dy;
+        ctx.fillText(brandText, btX, btY);
+        registerText('brandTag', btX, btY, btFs, brandText, 'left');
+
+        // Título (multilínea con wrap proporcional)
+        const t = off('title');
+        const titleFs = t.fontSize ?? 64;
+        const lineStep = Math.round(titleFs * 1.25);
         ctx.fillStyle = primaryColor;
-        ctx.font = '800 64px sans-serif';
+        ctx.font = `800 ${titleFs}px sans-serif`;
         const words = bannerTitle.split(' ');
+        const titleX = marginX + t.dx;
         let line = '';
-        let y = 280;
+        let y = Math.round(height * 0.35) + t.dy;
+        const firstLineY = y;
+        let maxLineWidth = 0;
         for (let n = 0; n < words.length; n++) {
           const testLine = line + words[n] + ' ';
           const metrics = ctx.measureText(testLine);
-          if (metrics.width > 900 && n > 0) {
-            ctx.fillText(line, 120, y);
+          if (metrics.width > width * 0.75 && n > 0) {
+            ctx.fillText(line, titleX, y);
+            maxLineWidth = Math.max(maxLineWidth, ctx.measureText(line).width);
             line = words[n] + ' ';
-            y += 80;
+            y += lineStep;
           } else {
             line = testLine;
           }
         }
-        ctx.fillText(line, 120, y);
+        ctx.fillText(line, titleX, y);
+        maxLineWidth = Math.max(maxLineWidth, ctx.measureText(line).width);
+        boxes.push({ id: 'title', x: titleX, y: firstLineY - titleFs * 0.8, w: maxLineWidth, h: (y - firstLineY) + titleFs * 1.05 });
 
         // Subtítulo
+        const s = off('subtitle');
+        const subFs = s.fontSize ?? 28;
         ctx.fillStyle = getRelativeLuminance(bodyBgColor) < 0.5 ? '#d4d4d8' : '#6b7280';
-        ctx.font = '500 28px sans-serif';
-        ctx.fillText(bannerSubtitle, 120, y + 80);
+        ctx.font = `500 ${subFs}px sans-serif`;
+        const subX = marginX + s.dx;
+        const subY = y + Math.round(titleFs * 1.25) + s.dy;
+        ctx.fillText(bannerSubtitle, subX, subY);
+        registerText('subtitle', subX, subY, subFs, bannerSubtitle, 'left');
 
-        // Flecha o elemento sutil abajo
+        // Flecha o elemento sutil abajo (decorativa, no interactiva)
+        const arrowY = subY + Math.round(titleFs * 1.25);
         ctx.strokeStyle = accentColor;
         ctx.lineWidth = 6;
         ctx.beginPath();
-        ctx.moveTo(120, y + 160);
-        ctx.lineTo(240, y + 160);
-        ctx.lineTo(220, y + 150);
-        ctx.moveTo(240, y + 160);
-        ctx.lineTo(220, y + 170);
+        ctx.moveTo(marginX, arrowY);
+        ctx.lineTo(marginX + 120, arrowY);
+        ctx.lineTo(marginX + 100, arrowY - 10);
+        ctx.moveTo(marginX + 120, arrowY);
+        ctx.lineTo(marginX + 100, arrowY + 10);
         ctx.stroke();
-      } 
+      }
       else if (bannerLayout === 'coupon') {
         // Layout de cupón o descuento
         ctx.strokeStyle = accentColor;
@@ -381,35 +493,86 @@ export default function VisualDesignHub({
         ctx.setLineDash([]); // Reset
 
         // Badge de descuento
+        const b = off('badge');
+        const badgeFs = b.fontSize ?? 120;
         ctx.fillStyle = accentColor;
-        ctx.font = '900 120px sans-serif';
+        ctx.font = `900 ${badgeFs}px sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText(bannerBadgeText, width / 2, height / 2 - 60);
+        const badgeX = width / 2 + b.dx;
+        const badgeY = height * 0.425 + b.dy;
+        ctx.fillText(bannerBadgeText, badgeX, badgeY);
+        registerText('badge', badgeX, badgeY, badgeFs, bannerBadgeText, 'center');
 
         // Título
+        const t = off('title');
+        const titleFs = t.fontSize ?? 42;
         ctx.fillStyle = primaryColor;
-        ctx.font = '800 42px sans-serif';
-        ctx.fillText(bannerTitle, width / 2, height / 2 + 50);
+        ctx.font = `800 ${titleFs}px sans-serif`;
+        const titleX = width / 2 + t.dx;
+        const titleY = height * 0.5625 + t.dy;
+        ctx.fillText(bannerTitle, titleX, titleY);
+        registerText('title', titleX, titleY, titleFs, bannerTitle, 'center');
 
         // Subtítulo
+        const s = off('subtitle');
+        const subFs = s.fontSize ?? 24;
         ctx.fillStyle = getRelativeLuminance(bodyBgColor) < 0.5 ? '#a1a1aa' : '#4b5563';
-        ctx.font = '500 24px sans-serif';
-        ctx.fillText(bannerSubtitle, width / 2, height / 2 + 110);
+        ctx.font = `500 ${subFs}px sans-serif`;
+        const subX = width / 2 + s.dx;
+        const subY = height * 0.6375 + s.dy;
+        ctx.fillText(bannerSubtitle, subX, subY);
+        registerText('subtitle', subX, subY, subFs, bannerSubtitle, 'center');
 
         // Botón
-        const btnWidth = 320;
-        const btnHeight = 64;
-        const btnX = (width - btnWidth) / 2;
-        const btnY = height / 2 + 170;
-        
+        const c = off('cta');
+        const btnWidth = c.btnWidth ?? 320;
+        const btnHeight = c.btnHeight ?? 64;
+        const btnRadius = c.btnRadius ?? 8;
+        const btnX = (width - btnWidth) / 2 + c.dx;
+        const btnY = height * 0.7125 + c.dy;
+
         ctx.fillStyle = primaryColor;
         ctx.beginPath();
-        ctx.roundRect(btnX, btnY, btnWidth, btnHeight, 8);
+        ctx.roundRect(btnX, btnY, btnWidth, btnHeight, btnRadius);
         ctx.fill();
 
         ctx.fillStyle = '#ffffff';
-        ctx.font = '700 20px sans-serif';
-        ctx.fillText(bannerCtaText, width / 2, btnY + 40);
+        const ctaFs = c.fontSize ?? 20;
+        ctx.font = `700 ${ctaFs}px sans-serif`;
+        ctx.fillText(bannerCtaText, btnX + btnWidth / 2, btnY + btnHeight / 2 + ctaFs * 0.35);
+        boxes.push({ id: 'cta', x: btnX, y: btnY, w: btnWidth, h: btnHeight });
+      }
+    };
+
+    const drawOverlaysAndFinish = () => {
+      hitBoxesRef.current = boxes;
+      if (opts?.forExport) return;
+      // Outline del elemento seleccionado
+      if (selectedElement) {
+        const box = boxes.find(bx => bx.id === selectedElement);
+        if (box) {
+          ctx.save();
+          ctx.setLineDash([6, 4]);
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(box.x - 8, box.y - 8, box.w + 16, box.h + 16);
+          ctx.restore();
+        }
+      }
+      // Guía de centrado durante el drag
+      if (dragRef.current) {
+        const box = boxes.find(bx => bx.id === dragRef.current!.id);
+        if (box && Math.abs(box.x + box.w / 2 - width / 2) < 2) {
+          ctx.save();
+          ctx.setLineDash([8, 8]);
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(width / 2, 0);
+          ctx.lineTo(width / 2, height);
+          ctx.stroke();
+          ctx.restore();
+        }
       }
     };
 
@@ -421,16 +584,17 @@ export default function VisualDesignHub({
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, width, height);
       renderTextAndDecorations();
-    } 
+      drawOverlaysAndFinish();
+    }
     else if (bannerBgType === 'solid') {
       ctx.fillStyle = bodyBgColor;
       ctx.fillRect(0, 0, width, height);
       renderTextAndDecorations();
-    } 
+      drawOverlaysAndFinish();
+    }
     else if (bannerBgType === 'image') {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
+      // Caché sincrónico: evita flicker en drag y permite exportar sin esperar onload
+      const drawCover = (img: HTMLImageElement) => {
         const imgRatio = img.width / img.height;
         const canvasRatio = width / height;
         let drawWidth = width;
@@ -451,24 +615,137 @@ export default function VisualDesignHub({
         // Capa de Overlay oscuro traslúcido para legibilidad
         ctx.fillStyle = `rgba(15, 23, 42, ${overlayOpacity})`;
         ctx.fillRect(0, 0, width, height);
-
-        renderTextAndDecorations();
       };
-      img.src = bannerBgUrl;
+
+      const cached = bgImageCacheRef.current.get(bannerBgUrl);
+      if (cached && cached.complete && cached.naturalWidth > 0) {
+        drawCover(cached);
+      } else {
+        if (!cached) {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => drawBannerRef.current();
+          img.src = bannerBgUrl;
+          bgImageCacheRef.current.set(bannerBgUrl, img);
+        }
+        // Placeholder oscuro mientras carga la imagen
+        ctx.fillStyle = '#1f2937';
+        ctx.fillRect(0, 0, width, height);
+      }
+      renderTextAndDecorations();
+      drawOverlaysAndFinish();
     }
   }, [
-    bannerLayout, bannerTitle, bannerSubtitle, bannerCtaText, bannerBadgeText, 
-    bannerBgType, bannerBgUrl, primaryColor, accentColor, gradientStart, 
-    gradientEnd, bodyBgColor, overlayOpacity, brand
+    bannerLayout, bannerTitle, bannerSubtitle, bannerCtaText, bannerBadgeText,
+    bannerBgType, bannerBgUrl, primaryColor, accentColor, gradientStart,
+    gradientEnd, bodyBgColor, overlayOpacity, brand,
+    bannerFormat, elementStyles, selectedElement, styleKey,
   ]);
 
-  // Dibujar cada vez que cambian las configuraciones del banner
+  // Referencia siempre actualizada (para el onload del fondo de imagen)
+  useEffect(() => {
+    drawBannerRef.current = () => drawBanner();
+  }, [drawBanner]);
+
+  // Dibujar cada vez que cambian las configuraciones del banner (sin debounce: el drag necesita redraw inmediato)
   useEffect(() => {
     if (activeTab === 'banners' && isOpen) {
-      const timer = setTimeout(() => drawBanner(), 80);
-      return () => clearTimeout(timer);
+      drawBanner();
     }
   }, [activeTab, isOpen, drawBanner]);
+
+  // === INTERACCIÓN CON EL CANVAS (clic + drag) ===
+  const getCanvasPoint = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: -1, y: -1 };
+    const rect = canvas.getBoundingClientRect();
+    // Compensar letterboxing de object-fit: contain
+    const scale = Math.min(rect.width / canvas.width, rect.height / canvas.height);
+    const offX = (rect.width - canvas.width * scale) / 2;
+    const offY = (rect.height - canvas.height * scale) / 2;
+    return { x: (e.clientX - rect.left - offX) / scale, y: (e.clientY - rect.top - offY) / scale };
+  };
+
+  const hitTest = (x: number, y: number): ElementBox | null => {
+    // En reversa: lo último dibujado queda arriba
+    for (let i = hitBoxesRef.current.length - 1; i >= 0; i--) {
+      const b = hitBoxesRef.current[i];
+      if (x >= b.x - 8 && x <= b.x + b.w + 8 && y >= b.y - 8 && y <= b.y + b.h + 8) return b;
+    }
+    return null;
+  };
+
+  const handleCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const { x, y } = getCanvasPoint(e);
+    const hit = hitTest(x, y);
+    if (hit) {
+      setSelectedElement(hit.id);
+      const st = elementStyles[styleKey]?.[hit.id] ?? { dx: 0, dy: 0 };
+      dragRef.current = {
+        id: hit.id, startX: x, startY: y, origDx: st.dx, origDy: st.dy,
+        startCenterX: hit.x + hit.w / 2, startCenterY: hit.y + hit.h / 2,
+      };
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // eventos sintéticos o pointers ya liberados no soportan captura
+      }
+    } else {
+      setSelectedElement(null);
+    }
+  };
+
+  const handleCanvasPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const { x, y } = getCanvasPoint(e);
+    const drag = dragRef.current;
+    const canvas = canvasRef.current;
+    if (!drag || !canvas) {
+      e.currentTarget.style.cursor = hitTest(x, y) ? 'move' : 'default';
+      return;
+    }
+    let dx = drag.origDx + (x - drag.startX);
+    let dy = drag.origDy + (y - drag.startY);
+    // Snap horizontal al centro del banner
+    const centerX = drag.startCenterX + (dx - drag.origDx);
+    if (Math.abs(centerX - canvas.width / 2) < 12) {
+      dx = drag.origDx + (canvas.width / 2 - drag.startCenterX);
+    }
+    // Clamp: el centro del elemento no sale del lienzo (margen 40px)
+    const cX = drag.startCenterX + (dx - drag.origDx);
+    const cY = drag.startCenterY + (dy - drag.origDy);
+    if (cX < 40) dx += 40 - cX;
+    if (cX > canvas.width - 40) dx -= cX - (canvas.width - 40);
+    if (cY < 40) dy += 40 - cY;
+    if (cY > canvas.height - 40) dy -= cY - (canvas.height - 40);
+    updateElementStyle(drag.id, { dx: Math.round(dx), dy: Math.round(dy) });
+  };
+
+  const handleCanvasPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    dragRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // el pointer pudo no estar capturado
+    }
+  };
+
+  // Al seleccionar un elemento, resaltar su input de texto en el panel
+  useEffect(() => {
+    if (!selectedElement) return;
+    const inputId = selectedElement === 'title' ? 'banner-title-input'
+      : selectedElement === 'subtitle' ? 'banner-subtitle-input'
+      : selectedElement === 'cta' ? 'banner-cta-input'
+      : selectedElement === 'badge' ? 'banner-badge-input'
+      : null;
+    if (!inputId) return;
+    const el = document.getElementById(inputId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      el.style.outline = '2px dashed var(--accent)';
+      const timer = setTimeout(() => { el.style.outline = ''; }, 1200);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedElement]);
 
   const handleSearchUnsplash = () => {
     if (!unsplashKeyword.trim()) return;
@@ -481,9 +758,18 @@ export default function VisualDesignHub({
   const handleSaveAndInjectBanner = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (bannerBgType === 'image') {
+      const cached = bgImageCacheRef.current.get(bannerBgUrl);
+      if (!cached || !cached.complete || cached.naturalWidth === 0) {
+        alert('La imagen de fondo todavía se está cargando — esperá un segundo y volvé a intentar.');
+        return;
+      }
+    }
     setIsGeneratingBanner(true);
 
     try {
+      // Redibujar sin outline de selección ni guías antes de exportar
+      drawBanner({ forExport: true });
       const blob = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob((b) => resolve(b), 'image/png');
       });
@@ -507,6 +793,8 @@ export default function VisualDesignHub({
       alert('Hubo un error al generar y guardar el adset promocional.');
     } finally {
       setIsGeneratingBanner(false);
+      // Restaurar la vista interactiva (outline de selección)
+      drawBanner();
     }
   };
 
@@ -756,29 +1044,123 @@ export default function VisualDesignHub({
                 {/* Left Side: Design Workspace (Interactive Canvas) */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div className="glass-shell" style={{ padding: 4, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                    <div className="glass-core" style={{ padding: 8, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#09090b', overflow: 'hidden' }}>
-                      <canvas 
-                        ref={canvasRef} 
-                        style={{ 
-                          width: '100%', 
-                          maxHeight: '360px', 
+                    <div className="glass-core" style={{ padding: 8, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-tertiary)', overflow: 'hidden' }}>
+                      <canvas
+                        ref={canvasRef}
+                        onPointerDown={handleCanvasPointerDown}
+                        onPointerMove={handleCanvasPointerMove}
+                        onPointerUp={handleCanvasPointerUp}
+                        onPointerCancel={handleCanvasPointerUp}
+                        style={{
+                          width: '100%',
+                          maxHeight: bannerFormat === 'square' ? '420px' : '360px',
                           objectFit: 'contain',
-                          borderRadius: 8, 
-                          boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-                          border: '1px solid rgba(255,255,255,0.08)' 
-                        }} 
+                          borderRadius: 8,
+                          boxShadow: 'var(--shadow-md)',
+                          border: '1px solid var(--border-subtle)',
+                          touchAction: 'none'
+                        }}
                       />
                     </div>
                   </div>
 
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Eye size={12} /> Vista previa del banner en alta resolución (1200x800px) lista para correos.
+                    <Eye size={12} /> Banner {BANNER_FORMATS[bannerFormat].hint}px · Hacé clic en un elemento para seleccionarlo y arrastralo para moverlo.
                   </div>
                 </div>
 
                 {/* Right Side: Builder Controls */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto', paddingRight: 6 }}>
-                  
+
+                  {/* Panel contextual del elemento seleccionado */}
+                  {selectedElement && (() => {
+                    const st: ElementStyle = { dx: 0, dy: 0, ...elementStyles[styleKey]?.[selectedElement] };
+                    const [fsMin, fsMax] = FONT_LIMITS[selectedElement];
+                    const canvasEl = canvasRef.current;
+                    const handleCenterH = () => {
+                      const box = hitBoxesRef.current.find(b => b.id === selectedElement);
+                      if (box && canvasEl) {
+                        updateElementStyle(selectedElement, { dx: Math.round(st.dx + canvasEl.width / 2 - (box.x + box.w / 2)) });
+                      }
+                    };
+                    return (
+                      <div className="glass-shell" style={{ padding: 4, border: '1px solid var(--border-accent)' }}>
+                        <div className="glass-core" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-accent)' }}>
+                              🎯 {ELEMENT_LABELS[selectedElement]}
+                            </span>
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button type="button" className="btn btn-ghost btn-sm" onClick={() => resetElementStyle(selectedElement)} title="Volver a la posición y tamaño original" style={{ fontSize: 10, padding: '2px 8px', height: 'auto' }}>
+                                ↺ Reset
+                              </button>
+                              <button type="button" className="btn btn-ghost btn-icon" onClick={() => setSelectedElement(null)} aria-label="Deseleccionar" style={{ width: 24, height: 24 }}>
+                                <X size={13} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Tamaño de fuente */}
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-secondary)' }}>
+                              <label>Tamaño de fuente</label>
+                              <span style={{ fontFamily: 'monospace' }}>{st.fontSize ?? '—'}px</span>
+                            </div>
+                            <input
+                              type="range"
+                              min={fsMin}
+                              max={fsMax}
+                              value={st.fontSize ?? Math.round((fsMin + fsMax) / 2)}
+                              onChange={e => updateElementStyle(selectedElement, { fontSize: parseInt(e.target.value) || undefined })}
+                              style={{ width: '100%', accentColor: 'var(--accent)' }}
+                            />
+                          </div>
+
+                          {/* Posición */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'end' }}>
+                            <div className="form-group" style={{ margin: 0 }}>
+                              <label className="form-label" style={{ fontSize: 10 }}>Offset X</label>
+                              <input type="number" className="form-input" value={st.dx} onChange={e => { const v = parseInt(e.target.value); if (!Number.isNaN(v)) updateElementStyle(selectedElement, { dx: v }); }} style={{ fontSize: 11, padding: '4px 8px' }} />
+                            </div>
+                            <div className="form-group" style={{ margin: 0 }}>
+                              <label className="form-label" style={{ fontSize: 10 }}>Offset Y</label>
+                              <input type="number" className="form-input" value={st.dy} onChange={e => { const v = parseInt(e.target.value); if (!Number.isNaN(v)) updateElementStyle(selectedElement, { dy: v }); }} style={{ fontSize: 11, padding: '4px 8px' }} />
+                            </div>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={handleCenterH} title="Centrar horizontalmente" style={{ fontSize: 10, padding: '4px 8px' }}>
+                              ⇔ Centrar
+                            </button>
+                          </div>
+
+                          {/* Controles del botón CTA */}
+                          {selectedElement === 'cta' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--border-subtle)', paddingTop: 8 }}>
+                              {([
+                                { key: 'btnWidth' as const, label: 'Ancho del botón', min: 160, max: 800, fallback: bannerLayout === 'coupon' ? 320 : 440 },
+                                { key: 'btnHeight' as const, label: 'Alto del botón', min: 40, max: 160, fallback: bannerLayout === 'coupon' ? 64 : 84 },
+                                { key: 'btnRadius' as const, label: 'Radio de esquinas', min: 0, max: 80, fallback: bannerLayout === 'coupon' ? 8 : 14 },
+                              ]).map(ctrl => (
+                                <div key={ctrl.key} className="form-group" style={{ margin: 0 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-secondary)' }}>
+                                    <label>{ctrl.label}</label>
+                                    <span style={{ fontFamily: 'monospace' }}>{st[ctrl.key] ?? ctrl.fallback}px</span>
+                                  </div>
+                                  <input
+                                    type="range"
+                                    min={ctrl.min}
+                                    max={ctrl.max}
+                                    value={st[ctrl.key] ?? ctrl.fallback}
+                                    onChange={e => { const v = parseInt(e.target.value); if (!Number.isNaN(v)) updateElementStyle(selectedElement, { [ctrl.key]: v }); }}
+                                    style={{ width: '100%', accentColor: 'var(--accent)' }}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Select Layout */}
                   <div className="form-group">
                     <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Layers size={13} /> Estilo de Layout</label>
@@ -792,6 +1174,25 @@ export default function VisualDesignHub({
                           style={{ flex: 1, fontSize: 11, textTransform: 'capitalize', borderRadius: 6 }}
                         >
                           {layout === 'promo' ? 'Promocional' : layout === 'minimal' ? 'Minimalista' : 'Cupón'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Formato del banner */}
+                  <div className="form-group">
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 4 }}><ImageIcon size={13} /> Formato del Banner</label>
+                    <div style={{ display: 'flex', gap: 6, background: 'var(--bg-primary)', padding: 4, borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+                      {(Object.keys(BANNER_FORMATS) as BannerFormat[]).map(format => (
+                        <button
+                          key={format}
+                          type="button"
+                          className={`btn btn-sm ${bannerFormat === format ? 'btn-primary' : 'btn-ghost'}`}
+                          onClick={() => { setBannerFormat(format); setSelectedElement(null); }}
+                          title={BANNER_FORMATS[format].hint}
+                          style={{ flex: 1, fontSize: 11, borderRadius: 6 }}
+                        >
+                          {BANNER_FORMATS[format].label}
                         </button>
                       ))}
                     </div>

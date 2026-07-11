@@ -165,11 +165,19 @@ function renderInfoBox(content: EmailContent, brand: Brand): string {
 function renderHero(hero: HeroBlock | undefined): string {
   if (!hero?.imageUrl) return '';
   const padding = hero.fullBleed ? '0' : '16px 16px 0';
-  const width = hero.fullBleed ? 600 : 568;
-  const img = `<img src="${hero.imageUrl}" alt="${hero.alt || ''}" width="${width}" class="hero-img" data-editor-field="hero" style="display:block;width:100%;max-width:${width}px;height:auto;" border="0">`;
-  const inner = hero.href
+  const baseWidth = hero.fullBleed ? 600 : 568;
+  const pct = Math.min(100, Math.max(30, hero.widthPercent ?? 100));
+  const width = Math.round((baseWidth * pct) / 100);
+  const radius = Math.min(32, Math.max(0, hero.borderRadius ?? 0));
+  const radiusStyle = radius > 0 ? `border-radius:${radius}px;` : '';
+  const img = `<img src="${hero.imageUrl}" alt="${hero.alt || ''}" width="${width}" class="hero-img" data-editor-field="hero" style="display:block;width:100%;max-width:${width}px;height:auto;${radiusStyle}" border="0">`;
+  let inner = hero.href
     ? `<a href="${hero.href}" target="_blank" rel="noopener noreferrer nofollow" style="display:block;">${img}</a>`
     : img;
+  if (pct < 100) {
+    // Centrado Outlook-safe: tabla con align, nunca margin/flex
+    inner = `<table role="presentation" align="center" width="${width}" cellpadding="0" cellspacing="0" border="0"><tr><td>${inner}</td></tr></table>`;
+  }
   return `
 <!-- ====== HERO ====== -->
 <tr>
@@ -183,10 +191,12 @@ function renderHero(hero: HeroBlock | undefined): string {
  */
 function renderImageTextBlock(block: ImageTextBlock | undefined, brand: Brand): string {
   if (!block?.imageUrl || !block?.text) return '';
+  const imgWidth = Math.min(252, Math.max(120, Math.round(block.imageWidth ?? 252)));
+  const radius = Math.min(32, Math.max(0, block.borderRadius ?? 8));
   const imgCell = `
 <!--[if mso]><td width="260" valign="top"><![endif]-->
-<div class="stack-column" style="display:inline-block;width:100%;max-width:260px;vertical-align:top;">
-  <img src="${block.imageUrl}" alt="${block.alt || ''}" width="252" data-editor-field="imageText" style="display:block;width:100%;max-width:252px;height:auto;border-radius:8px;" border="0">
+<div class="stack-column" style="display:inline-block;width:100%;max-width:260px;vertical-align:top;text-align:center;">
+  <img src="${block.imageUrl}" alt="${block.alt || ''}" width="${imgWidth}" data-editor-field="imageText" style="display:inline-block;width:100%;max-width:${imgWidth}px;height:auto;border-radius:${radius}px;" border="0">
 </div>
 <!--[if mso]></td><![endif]-->`;
   const textCell = `
@@ -218,13 +228,14 @@ function renderGallery(gallery: GalleryBlock | undefined, brand: Brand): string 
   if (!images.length) return '';
   const cols = gallery!.columns === 3 ? 3 : 2;
   const cellWidth = cols === 3 ? 168 : 260;
+  const radius = Math.min(32, Math.max(0, gallery!.borderRadius ?? 8));
 
   const rows: string[] = [];
   for (let i = 0; i < images.length; i += cols) {
     const rowImages = images.slice(i, i + cols);
     const cells = rowImages
       .map((img, j) => {
-        const tag = `<img src="${img.url}" alt="${img.alt || ''}" width="${cellWidth}" data-editor-field="gallery-${i + j}" style="display:block;width:100%;max-width:${cellWidth}px;height:auto;border-radius:8px;" border="0">`;
+        const tag = `<img src="${img.url}" alt="${img.alt || ''}" width="${cellWidth}" data-editor-field="gallery-${i + j}" style="display:block;width:100%;max-width:${cellWidth}px;height:auto;border-radius:${radius}px;" border="0">`;
         const inner = img.href
           ? `<a href="${img.href}" target="_blank" rel="noopener noreferrer nofollow" style="display:block;">${tag}</a>`
           : tag;
@@ -336,8 +347,10 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number): str
     }
 
     case 'hero': {
-      return renderHero({ imageUrl: block.imageUrl, alt: block.alt, href: block.href, fullBleed: block.fullBleed })
-        .replace('data-editor-field="hero"', `data-editor-field="${prefix}-imageUrl"`);
+      return renderHero({
+        imageUrl: block.imageUrl, alt: block.alt, href: block.href, fullBleed: block.fullBleed,
+        borderRadius: block.borderRadius, widthPercent: block.widthPercent,
+      }).replace('data-editor-field="hero"', `data-editor-field="${prefix}-imageUrl"`);
     }
 
     case 'text': {
@@ -363,7 +376,10 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number): str
 
     case 'image-text': {
       const html = renderImageTextBlock(
-        { imageUrl: block.imageUrl, alt: block.alt, title: block.title, text: block.text, imagePosition: block.imagePosition },
+        {
+          imageUrl: block.imageUrl, alt: block.alt, title: block.title, text: block.text, imagePosition: block.imagePosition,
+          borderRadius: block.borderRadius, imageWidth: block.imageWidth,
+        },
         brand
       );
       if (!html) return '';
@@ -377,7 +393,7 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number): str
     }
 
     case 'gallery': {
-      const html = renderGallery({ images: block.images, columns: block.columns, caption: block.caption }, brand);
+      const html = renderGallery({ images: block.images, columns: block.columns, caption: block.caption, borderRadius: block.borderRadius }, brand);
       if (!html) return '';
       return `
 <!-- ====== BLOCK ${index}: GALLERY ====== -->

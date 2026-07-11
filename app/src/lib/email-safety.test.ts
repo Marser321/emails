@@ -36,4 +36,27 @@ describe('email safety', () => {
     expect(safe.ctaUrl).toBe('');
     expect(JSON.stringify(safe.blocks)).not.toContain('<script>');
   });
+
+  it('clamps image style fields and preserves undefined', () => {
+    const safe = sanitizeContentForEmail({
+      ...content,
+      hero: { imageUrl: 'https://x.com/a.png', borderRadius: 999, widthPercent: 5 },
+      imageText: { imageUrl: 'https://x.com/b.png', text: 't', imagePosition: 'left', borderRadius: -5, imageWidth: 9999 },
+      gallery: { images: [{ url: 'https://x.com/c.png' }], columns: 2, borderRadius: NaN as unknown as number },
+      blocks: [
+        { id: 'h', type: 'hero', imageUrl: 'https://x.com/d.png', borderRadius: 100, widthPercent: 55 },
+        { id: 'g', type: 'gallery', images: [{ url: 'https://x.com/e.png' }], columns: 2 },
+      ],
+    });
+    expect(safe.hero?.borderRadius).toBe(32);       // 999 → max 32
+    expect(safe.hero?.widthPercent).toBe(30);       // 5 → min 30
+    expect(safe.imageText?.borderRadius).toBe(0);   // -5 → min 0
+    expect(safe.imageText?.imageWidth).toBe(252);   // 9999 → max 252
+    expect(safe.gallery?.borderRadius).toBeUndefined(); // NaN → undefined
+    const heroBlock = safe.blocks?.[0] as { borderRadius?: number; widthPercent?: number };
+    expect(heroBlock.borderRadius).toBe(32);
+    expect(heroBlock.widthPercent).toBe(55);
+    const galleryBlock = safe.blocks?.[1] as { borderRadius?: number };
+    expect(galleryBlock.borderRadius).toBeUndefined(); // ausente → sigue ausente
+  });
 });

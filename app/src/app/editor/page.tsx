@@ -1137,65 +1137,25 @@ function EditorContent() {
               <div className="glass-core" style={{ height: '100%', padding: '20px 16px', display: 'flex', flexDirection: 'column' }}>
                 
                 {/* Tab Switcher */}
-                <div style={{ 
-                  display: 'flex', 
-                  background: 'rgba(5, 5, 10, 0.4)', 
-                  borderRadius: '100px', 
-                  padding: 4, 
-                  border: '1px solid var(--border-subtle)',
-                  marginBottom: 20
-                }}>
+                <div className="pill-tabs" style={{ marginBottom: 20 }}>
                   <button
                     type="button"
+                    className={`pill-tab ${activeTab === 'editor' ? 'active' : ''}`}
                     onClick={() => setActiveTab('editor')}
-                    style={{
-                      flex: 1,
-                      padding: '8px 10px',
-                      border: 'none',
-                      borderRadius: '100px',
-                      background: activeTab === 'editor' ? 'var(--accent-gradient)' : 'transparent',
-                      color: activeTab === 'editor' ? '#ffffff' : 'var(--text-secondary)',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      transition: 'all var(--transition-fast)',
-                    }}
                   >
                     ✏️ Contenido
                   </button>
                   <button
                     type="button"
+                    className={`pill-tab ${activeTab === 'canvas' ? 'active' : ''}`}
                     onClick={() => setActiveTab('canvas')}
-                    style={{
-                      flex: 1,
-                      padding: '8px 10px',
-                      border: 'none',
-                      borderRadius: '100px',
-                      background: activeTab === 'canvas' ? 'var(--accent-gradient)' : 'transparent',
-                      color: activeTab === 'canvas' ? '#ffffff' : 'var(--text-secondary)',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      transition: 'all var(--transition-fast)',
-                    }}
                   >
                     🧱 Canvas
                   </button>
                   <button
                     type="button"
+                    className={`pill-tab ${activeTab === 'drafts' ? 'active' : ''}`}
                     onClick={() => setActiveTab('drafts')}
-                    style={{
-                      flex: 1,
-                      padding: '8px 10px',
-                      border: 'none',
-                      borderRadius: '100px',
-                      background: activeTab === 'drafts' ? 'var(--accent-gradient)' : 'transparent',
-                      color: activeTab === 'drafts' ? '#ffffff' : 'var(--text-secondary)',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      transition: 'all var(--transition-fast)',
-                    }}
                   >
                     📁 Biblioteca
                   </button>
@@ -2136,67 +2096,30 @@ function EditorContent() {
             {/* ====== RIGHT PANEL: Preview ====== */}
             <div className="glass-shell">
               <div className="glass-core" style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
-                <div className="preview-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(10, 14, 23, 0.4)', padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', flexWrap: 'wrap', gap: 12 }}>
+                <div className="preview-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', flexWrap: 'wrap', gap: 12 }}>
                   
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                     {/* Premium sliding switcher */}
-                    <div style={{ 
-                      display: 'flex', 
-                      background: 'rgba(5, 5, 10, 0.6)', 
-                      borderRadius: '100px', 
-                      padding: 4, 
-                      border: '1px solid var(--border-subtle)',
-                      position: 'relative'
-                    }}>
+                    <div className="pill-tabs" style={{ position: 'relative' }}>
                       <button
-                        className={viewMode === 'desktop' ? 'active' : ''}
+                        className={`pill-tab ${viewMode === 'desktop' ? 'active' : ''}`}
                         onClick={() => setViewMode('desktop')}
-                        style={{
-                          padding: '6px 16px',
-                          border: 'none',
-                          borderRadius: '100px',
-                          background: viewMode === 'desktop' ? 'var(--accent-gradient)' : 'transparent',
-                          color: viewMode === 'desktop' ? '#ffffff' : 'var(--text-secondary)',
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          transition: 'all var(--transition-fast)',
-                        }}
+                        style={{ padding: '6px 16px', fontSize: 12, flex: 'none' }}
                       >
                         🖥️ Desktop
                       </button>
                       <button
-                        className={viewMode === 'mobile' ? 'active' : ''}
+                        className={`pill-tab ${viewMode === 'mobile' ? 'active' : ''}`}
                         onClick={() => setViewMode('mobile')}
-                        style={{
-                          padding: '6px 16px',
-                          border: 'none',
-                          borderRadius: '100px',
-                          background: viewMode === 'mobile' ? 'var(--accent-gradient)' : 'transparent',
-                          color: viewMode === 'mobile' ? '#ffffff' : 'var(--text-secondary)',
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          transition: 'all var(--transition-fast)',
-                        }}
+                        style={{ padding: '6px 16px', fontSize: 12, flex: 'none' }}
                       >
                         📱 Mobile
                       </button>
                       <button
-                        className={viewMode === 'split' ? 'active' : ''}
+                        className={`pill-tab ${viewMode === 'split' ? 'active' : ''}`}
                         onClick={() => setViewMode('split')}
                         title="Ver desktop y mobile lado a lado"
-                        style={{
-                          padding: '6px 16px',
-                          border: 'none',
-                          borderRadius: '100px',
-                          background: viewMode === 'split' ? 'var(--accent-gradient)' : 'transparent',
-                          color: viewMode === 'split' ? '#ffffff' : 'var(--text-secondary)',
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          transition: 'all var(--transition-fast)',
-                        }}
+                        style={{ padding: '6px 16px', fontSize: 12, flex: 'none' }}
                       >
                         ⬛⬜ Ambos
                       </button>
@@ -2300,9 +2223,9 @@ function EditorContent() {
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
-                    gap: 12, 
-                    background: 'rgba(5, 5, 10, 0.2)', 
-                    padding: '8px 20px', 
+                    gap: 12,
+                    background: 'var(--bg-primary)',
+                    padding: '8px 20px',
                     borderBottom: '1px solid var(--border-subtle)',
                     fontSize: 11,
                     color: 'var(--text-secondary)'
@@ -2335,7 +2258,7 @@ function EditorContent() {
                   justifyContent: 'center',
                   gap: 24,
                   padding: 24,
-                  background: 'rgba(5, 5, 10, 0.4)',
+                  background: 'var(--bg-tertiary)',
                   overflowY: 'auto',
                   overflowX: viewMode === 'split' ? 'auto' : undefined,
                   borderTop: 'none',
@@ -2353,7 +2276,7 @@ function EditorContent() {
                         width: viewMode === 'mobile' ? 390 : viewMode === 'split' ? 600 : previewWidth,
                         maxWidth: viewMode === 'split' ? undefined : '100%',
                         borderRadius: 'var(--radius-md)',
-                        boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                        boxShadow: 'var(--shadow-lg)',
                         border: '1px solid rgba(255,255,255,0.05)',
                         background: '#ffffff',
                         transition: 'width 100ms ease, height var(--transition-base)',
@@ -2370,7 +2293,7 @@ function EditorContent() {
                         style={{
                           width: 390,
                           borderRadius: 'var(--radius-md)',
-                          boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                          boxShadow: 'var(--shadow-lg)',
                           border: '1px solid rgba(255,255,255,0.05)',
                           background: '#ffffff',
                           transition: 'height var(--transition-base)',
@@ -2449,24 +2372,14 @@ function EditorContent() {
 
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label">Motor por defecto</label>
-                    <div style={{ display: 'flex', background: 'rgba(5, 5, 10, 0.4)', borderRadius: '100px', padding: 4, border: '1px solid var(--border-subtle)' }}>
+                    <div className="pill-tabs">
                       {(['gemini', 'claude'] as AIEngine[]).map(engine => (
                         <button
                           key={engine}
                           type="button"
+                          className={`pill-tab ${selectedEngine === engine ? 'active' : ''}`}
                           onClick={() => handleChangeDefaultEngine(engine)}
-                          style={{
-                            flex: 1,
-                            padding: '8px 10px',
-                            border: 'none',
-                            borderRadius: '100px',
-                            background: selectedEngine === engine ? 'var(--accent-gradient)' : 'transparent',
-                            color: selectedEngine === engine ? '#ffffff' : 'var(--text-secondary)',
-                            fontSize: 12,
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            transition: 'all var(--transition-fast)',
-                          }}
+                          style={{ fontSize: 12 }}
                         >
                           {ENGINE_LABELS[engine]}
                         </button>
@@ -2510,27 +2423,16 @@ function EditorContent() {
                   {/* Selector de motor */}
                   <div className="form-group">
                     <label className="form-label">Motor de IA</label>
-                    <div style={{ display: 'flex', background: 'rgba(5, 5, 10, 0.4)', borderRadius: '100px', padding: 4, border: '1px solid var(--border-subtle)', maxWidth: 300 }}>
+                    <div className="pill-tabs" style={{ maxWidth: 300 }}>
                       {(['gemini', 'claude'] as AIEngine[]).map(engine => (
                         <button
                           key={engine}
                           type="button"
+                          className={`pill-tab ${selectedEngine === engine ? 'active' : ''}`}
                           disabled={generatingCopy}
                           onClick={() => handleChangeDefaultEngine(engine)}
                           title={hasKeyForEngine(engine) ? undefined : 'Falta configurar la API key de este motor'}
-                          style={{
-                            flex: 1,
-                            padding: '6px 12px',
-                            border: 'none',
-                            borderRadius: '100px',
-                            background: selectedEngine === engine ? 'var(--accent-gradient)' : 'transparent',
-                            color: selectedEngine === engine ? '#ffffff' : 'var(--text-secondary)',
-                            fontSize: 12,
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            opacity: hasKeyForEngine(engine) ? 1 : 0.5,
-                            transition: 'all var(--transition-fast)',
-                          }}
+                          style={{ fontSize: 12, opacity: hasKeyForEngine(engine) ? 1 : 0.5 }}
                         >
                           {ENGINE_LABELS[engine]}
                         </button>

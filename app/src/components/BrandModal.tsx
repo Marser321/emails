@@ -629,7 +629,7 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
             </div>
           </div>
 
-          <div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid var(--border-subtle)', background: 'rgba(10, 14, 23, 0.2)' }}>
+          <div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-primary)' }}>
             <button className="btn btn-ghost" onClick={onClose} style={{ marginRight: 8 }}>Cancelar</button>
             <button className="btn btn-primary" onClick={handleSave} disabled={!form.name.trim()}>
               {isEditing ? '💾 Guardar cambios' : '➕ Crear marca'}

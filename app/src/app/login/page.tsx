@@ -31,7 +31,7 @@ export default function LoginPage() {
   }, [router]);
 
   return (
-    <main className="login-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#09090b', color: 'white' }}>
+    <main className="login-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       <div style={{ textAlign: 'center' }}>
         {errorMsg ? (
           <div style={{ color: '#ef4444' }}>

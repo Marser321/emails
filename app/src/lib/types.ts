@@ -68,6 +68,8 @@ export interface HeroBlock {
   alt?: string;
   href?: string;
   fullBleed?: boolean;
+  borderRadius?: number; // px 0-32, default 0
+  widthPercent?: number; // 30-100, default 100
 }
 
 export interface ImageTextBlock {
@@ -76,12 +78,15 @@ export interface ImageTextBlock {
   title?: string;
   text: string;
   imagePosition: 'left' | 'right';
+  borderRadius?: number; // px 0-32, default 8
+  imageWidth?: number;   // px 120-252, default 252
 }
 
 export interface GalleryBlock {
   images: { url: string; alt?: string; href?: string }[];
   columns: 2 | 3;
   caption?: string;
+  borderRadius?: number; // px 0-32, default 8
 }
 
 export interface QuoteBlock {
@@ -122,6 +127,8 @@ export interface HeroBlockConfig extends BlockBase {
   alt?: string;
   href?: string;
   fullBleed?: boolean;
+  borderRadius?: number; // px 0-32, default 0
+  widthPercent?: number; // 30-100, default 100
 }
 
 export interface TextBlockConfig extends BlockBase {
@@ -138,6 +145,8 @@ export interface ImageTextBlockConfig extends BlockBase {
   title?: string;
   text: string;
   imagePosition: 'left' | 'right';
+  borderRadius?: number; // px 0-32, default 8
+  imageWidth?: number;   // px 120-252, default 252
 }
 
 export interface GalleryBlockConfig extends BlockBase {
@@ -145,6 +154,7 @@ export interface GalleryBlockConfig extends BlockBase {
   images: { url: string; alt?: string; href?: string }[];
   columns: 2 | 3;
   caption?: string;
+  borderRadius?: number; // px 0-32, default 8
 }
 
 export interface BulletsBlockConfig extends BlockBase {

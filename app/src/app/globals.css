@@ -1115,7 +1115,7 @@ body::after {
 /* Pill tabs reutilizables (switchers segmentados) */
 .pill-tabs {
   display: flex;
-  background: rgba(5, 5, 10, 0.4);
+  background: var(--bg-tertiary);
   border-radius: 100px;
   padding: 4px;
   border: 1px solid var(--border-subtle);
