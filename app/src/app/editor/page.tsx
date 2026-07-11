@@ -231,8 +231,12 @@ function EditorContent() {
   useEffect(() => {
     const bridge = window as Window & { __emailStudioSelectBlock?: (blockId: string) => void };
     bridge.__emailStudioSelectBlock = (blockId: string) => {
-      setSelectedBlockId(blockId);
-      setActiveTab('canvas');
+      if (blockId.startsWith('legacy-')) {
+        setActiveTab('editor');
+      } else {
+        setSelectedBlockId(blockId);
+        setActiveTab('canvas');
+      }
     };
     return () => { delete bridge.__emailStudioSelectBlock; };
   }, []);
@@ -242,10 +246,14 @@ function EditorContent() {
       if (event.source !== iframeRef.current?.contentWindow && event.source !== mobileIframeRef.current?.contentWindow) return;
       if (event.data && event.data.type === 'focus-field') {
         if (typeof event.data.blockId === 'string' && event.data.blockId) {
-          setSelectedBlockId(event.data.blockId);
-          setActiveTab('canvas');
-          return;
+          if (!event.data.blockId.startsWith('legacy-')) {
+            setSelectedBlockId(event.data.blockId);
+            setActiveTab('canvas');
+            return;
+          }
         }
+        
+        setActiveTab('editor');
         const fieldName = event.data.field;
         let elementId = `content-${fieldName}`;
         
@@ -509,8 +517,13 @@ function EditorContent() {
         const blockId = target?.closest('[data-block-id]')?.getAttribute('data-block-id');
         if (!blockId) return;
         event.preventDefault();
-        setSelectedBlockId(blockId);
-        setActiveTab('canvas');
+        
+        if (blockId.startsWith('legacy-')) {
+          setActiveTab('editor');
+        } else {
+          setSelectedBlockId(blockId);
+          setActiveTab('canvas');
+        }
       }, true);
       // Auto-resize iframe
       setTimeout(() => {
