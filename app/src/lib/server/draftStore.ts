@@ -1,6 +1,7 @@
 import type { Draft } from '@/lib/types';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { isSupabaseConfigured } from './env';
+import { toUuidOrNull } from './auth';
 import { generateId, readJson, withFileLock, writeJson } from './storage';
 
 const LOCAL_FILE = 'drafts.json';
@@ -60,7 +61,7 @@ export async function saveDraft(input: Omit<Draft, 'id' | 'date'> & Partial<Pick
     content: draft.content,
     date: draft.date,
     schema_version: 4,
-    created_by: userId,
+    created_by: toUuidOrNull(userId),
   });
   if (error) throw new Error(error.message);
   return draft;

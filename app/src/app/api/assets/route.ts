@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import sharp from 'sharp';
 import { z, ZodError } from 'zod';
 import type { EmailAsset } from '@/lib/types';
-import { AuthenticationError, requireUser } from '@/lib/server/auth';
+import { AuthenticationError, requireUser, toUuidOrNull } from '@/lib/server/auth';
 import { isSupabaseConfigured } from '@/lib/server/env';
 import { createServerSupabase } from '@/lib/supabase/server';
 
@@ -170,7 +170,7 @@ export async function POST(req: Request) {
 
     const { data, error } = await supabase.from('assets').insert({
       brand_id: brandId, filename: `${base}.${extension}`, storage_path: storagePath, thumbnail_path: thumbnailPath,
-      kind, alt_text: altText, width, height, mime_type: mimeType, byte_size: emailBuffer.length, created_by: user.id,
+      kind, alt_text: altText, width, height, mime_type: mimeType, byte_size: emailBuffer.length, created_by: toUuidOrNull(user.id),
       author,
     }).select().single();
     if (error) {

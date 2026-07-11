@@ -13,6 +13,9 @@ const navItems = [
   { href: '/brands', Icon: Building2, label: 'Marcas' },
 ];
 
+// Modo público (iframe GHL sin login): no mostramos el botón de cerrar sesión.
+const OPEN_ACCESS = process.env.NEXT_PUBLIC_OPEN_ACCESS === 'true';
+
 export default function Sidebar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -54,7 +57,9 @@ export default function Sidebar() {
         </nav>
 
         <div className="sidebar-footer">
-          <button type="button" className="sidebar-signout" onClick={signOut}><LogOut size={18} /> Cerrar sesión</button>
+          {!OPEN_ACCESS && (
+            <button type="button" className="sidebar-signout" onClick={signOut}><LogOut size={18} /> Cerrar sesión</button>
+          )}
           <small>Diseño y envío profesional</small>
         </div>
       </aside>

@@ -2,6 +2,7 @@ import { Brand, DEFAULT_BRAND } from '@/lib/types';
 import { isSupabaseConfigured } from './env';
 import { readJson, withFileLock, writeJson } from './storage';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { toUuidOrNull } from './auth';
 
 const LOCAL_FILE = 'brands.json';
 
@@ -99,7 +100,7 @@ export async function createBrand(data: Partial<Brand>, createdBy?: string): Pro
     });
   }
   const supabase = await createServerSupabase();
-  const { error } = await supabase.from('brands').insert({ ...toRow(brand), created_by: createdBy || null });
+  const { error } = await supabase.from('brands').insert({ ...toRow(brand), created_by: toUuidOrNull(createdBy) });
   if (error) throw new Error(error.message);
   return brand;
 }

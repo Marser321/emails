@@ -2,8 +2,15 @@ import 'server-only';
 
 import type { User } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { isAuthBypassEnabled, isSupabaseConfigured } from '@/lib/server/env';
+import { isAuthBypassEnabled, isOpenAccessEnabled, isSupabaseConfigured } from '@/lib/server/env';
 import { createServerSupabase } from '@/lib/supabase/server';
+
+// Devuelve el id solo si es un UUID válido; si no (usuario de sistema en modo
+// abierto/bypass), null — así created_by no rompe la FK a auth.users.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function toUuidOrNull(id: string | undefined | null): string | null {
+  return id && UUID_RE.test(id) ? id : null;
+}
 
 export class AuthenticationError extends Error {
   constructor(message = 'Autenticación requerida') {
@@ -26,7 +33,12 @@ const LOCAL_USER = {
   created_at: new Date(0).toISOString(),
 } as User;
 
+// Usuario de sistema para el modo público (sin login). Su id no es un UUID a
+// propósito: toUuidOrNull lo convierte en null al escribir created_by.
+const OPEN_ACCESS_USER = { ...LOCAL_USER, id: 'open-access', email: 'workspace@admediasolution.com' } as User;
+
 export async function requireUser(): Promise<User> {
+  if (isOpenAccessEnabled()) return OPEN_ACCESS_USER;
   if (isAuthBypassEnabled()) return LOCAL_USER;
   if (!isSupabaseConfigured()) throw new AuthenticationError('Supabase no está configurado');
 

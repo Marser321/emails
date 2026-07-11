@@ -6,8 +6,10 @@ const PUBLIC_PATHS = ['/login', '/auth/confirm'];
 export async function proxy(request: NextRequest) {
   const isLegacyPublicAsset = request.method === 'GET' && /^\/api\/assets\/[^/]+\/[^/]+$/.test(request.nextUrl.pathname);
   if (isLegacyPublicAsset) return NextResponse.next();
+  // Modo público (iframe GHL) o bypass de dev: sin verificación de sesión.
+  const openAccess = process.env.EMAILBUILDER_OPEN_ACCESS === 'true';
   const bypass = process.env.NODE_ENV !== 'production' && process.env.EMAILBUILDER_AUTH_BYPASS === 'true';
-  if (bypass) return NextResponse.next();
+  if (openAccess || bypass) return NextResponse.next();
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
