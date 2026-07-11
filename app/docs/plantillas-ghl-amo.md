@@ -13,9 +13,9 @@ Voz: Mandy — cercana, directa, primera persona, enseña antes de vender.
 
 | Placeholder | Qué es |
 |---|---|
-| `{{masterclass_link}}` | Link de Zoom de la masterclass |
-| `{{offers_link}}` | Página de ofertas / checkout |
-| `{{academy_link}}` | Acceso a Mandy Academy |
+| `{{custom_values.masterclass_link}}` | Link de Zoom de la masterclass |
+| `{{custom_values.offers_link}}` | Página de ofertas / checkout |
+| `{{custom_values.academy_link}}` | Acceso a Mandy Academy |
 
 ---
 
@@ -37,7 +37,7 @@ Variables: `{{1}}` nombre · `{{2}}` fecha (18 de julio) · `{{3}}` hora (11:00 
 
 **SMS**
 
-> Hola {{contact.first_name}}, soy Mandy 👋 En 3 días es nuestra masterclass EN VIVO para limpiar tu crédito legalmente. 18 de julio, 11 AM (Miami). Guarda tu acceso: {{masterclass_link}}
+> Hola {{contact.first_name}}, soy Mandy 👋 En 3 días es nuestra masterclass EN VIVO para limpiar tu crédito legalmente. 18 de julio, 11 AM (Miami). Guarda tu acceso: {{custom_values.masterclass_link}}
 
 ## 1.2 — 2 días antes (tip de valor)
 
@@ -53,7 +53,7 @@ Variables: `{{1}}` nombre · `{{2}}` fecha · `{{3}}` link Zoom
 
 **SMS**
 
-> {{contact.first_name}}, tip de Mandy: mantén tus tarjetas bajo el 10% de uso — es gratis y sube tu puntaje. El viernes 18 a las 11 AM (Miami) te enseño el sistema completo en vivo: {{masterclass_link}}
+> {{contact.first_name}}, tip de Mandy: mantén tus tarjetas bajo el 10% de uso — es gratis y sube tu puntaje. El viernes 18 a las 11 AM (Miami) te enseño el sistema completo en vivo: {{custom_values.masterclass_link}}
 
 ## 1.3 — 24 horas antes (bono del vivo)
 
@@ -69,7 +69,7 @@ Variables: `{{1}}` nombre · `{{2}}` fecha · `{{3}}` hora · `{{4}}` link Zoom
 
 **SMS**
 
-> {{contact.first_name}}, ¡es MAÑANA! Masterclass en vivo 11 AM (Miami). Por estar en vivo recibes un bono que no se repite en la grabación. Guarda tu link: {{masterclass_link}} — Mandy
+> {{contact.first_name}}, ¡es MAÑANA! Masterclass en vivo 11 AM (Miami). Por estar en vivo recibes un bono que no se repite en la grabación. Guarda tu link: {{custom_values.masterclass_link}} — Mandy
 
 ## 1.4 — 1 hora antes
 
@@ -85,7 +85,7 @@ Variables: `{{1}}` nombre · `{{2}}` link Zoom
 
 **SMS**
 
-> {{contact.first_name}}, en 1 HORA empezamos la masterclass en vivo. No llegues tarde — hay oferta especial solo para los que estén conectados: {{masterclass_link}} — Mandy
+> {{contact.first_name}}, en 1 HORA empezamos la masterclass en vivo. No llegues tarde — hay oferta especial solo para los que estén conectados: {{custom_values.masterclass_link}} — Mandy
 
 ## 1.5 — 5 minutos antes
 
@@ -97,7 +97,7 @@ Variables: `{{1}}` nombre · `{{2}}` link Zoom
 
 **SMS**
 
-> ¡{{contact.first_name}}, empezamos en 5 minutos! Entra YA: {{masterclass_link}} — Mandy 🔴
+> ¡{{contact.first_name}}, empezamos en 5 minutos! Entra YA: {{custom_values.masterclass_link}} — Mandy 🔴
 
 ## 1.6 — 30 min después de iniciada (no entraron)
 
@@ -113,7 +113,7 @@ Variables: `{{1}}` nombre · `{{2}}` link Zoom
 
 **SMS**
 
-> {{contact.first_name}}, sigo EN VIVO presentando las ofertas: 7 días gratis de Mandy Academy + revisión de crédito por $1. Termina al cerrar la transmisión: {{masterclass_link}}
+> {{contact.first_name}}, sigo EN VIVO presentando las ofertas: 7 días gratis de Mandy Academy + revisión de crédito por $1. Termina al cerrar la transmisión: {{custom_values.masterclass_link}}
 
 ---
 
@@ -137,7 +137,7 @@ Variables: `{{1}}` nombre · `{{2}}` link página de ofertas
 
 **SMS**
 
-> {{contact.first_name}}, tu pago no se procesó 😕 Tu cupo sigue reservado — inténtalo con otra tarjeta u otro método aquí: {{offers_link}} ¿Dudas? Responde este mensaje. — Mandy
+> {{contact.first_name}}, tu pago no se procesó 😕 Tu cupo sigue reservado — inténtalo con otra tarjeta u otro método aquí: {{custom_values.offers_link}} ¿Dudas? Responde este mensaje. — Mandy
 
 # 3. Pago exitoso
 
@@ -161,7 +161,7 @@ Variables: `{{1}}` nombre · `{{2}}` link de acceso (Academy/servicio)
 
 **SMS**
 
-> ¡{{contact.first_name}}, tu pago fue confirmado! 🎉 Bienvenida/o. Tu acceso: {{academy_link}} — Cualquier duda respóndeme. Orgullosa de ti. — Mandy
+> ¡{{contact.first_name}}, tu pago fue confirmado! 🎉 Bienvenida/o. Tu acceso: {{custom_values.academy_link}} — Cualquier duda respóndeme. Orgullosa de ti. — Mandy
 
 ---
 
@@ -187,7 +187,7 @@ Variables: `{{1}}` nombre · `{{2}}` link ofertas
 
 **SMS**
 
-> {{contact.first_name}}, ayer viste que tu crédito SÍ se puede arreglar legalmente. La oferta de la masterclass sigue abierta hoy: {{offers_link}} No es magia, es un sistema. — Mandy
+> {{contact.first_name}}, ayer viste que tu crédito SÍ se puede arreglar legalmente. La oferta de la masterclass sigue abierta hoy: {{custom_values.offers_link}} No es magia, es un sistema. — Mandy
 
 ## 4.2 — D+2 (objeciones)
 
@@ -205,7 +205,7 @@ Variables: `{{1}}` nombre · `{{2}}` link ofertas
 
 **SMS**
 
-> {{contact.first_name}}, ¿"y si no me funciona"? Mis clientes empezaron con el crédito peor que el tuyo. La diferencia: siguieron el sistema. Empieza hoy: {{offers_link}} — Mandy
+> {{contact.first_name}}, ¿"y si no me funciona"? Mis clientes empezaron con el crédito peor que el tuyo. La diferencia: siguieron el sistema. Empieza hoy: {{custom_values.offers_link}} — Mandy
 
 ## 4.3 — D+3 (lo que se llevan / prueba social)
 
@@ -227,7 +227,7 @@ Variables: `{{1}}` nombre · `{{2}}` link ofertas
 
 **SMS**
 
-> {{contact.first_name}}, dentro de la Academy: eliminar colecciones y charge-offs, disputas avanzadas, reconstruir desde cero y crédito empresarial. Todo paso a paso: {{offers_link}} — Mandy
+> {{contact.first_name}}, dentro de la Academy: eliminar colecciones y charge-offs, disputas avanzadas, reconstruir desde cero y crédito empresarial. Todo paso a paso: {{custom_values.offers_link}} — Mandy
 
 ## 4.4 — D+5 (última llamada)
 
@@ -249,14 +249,14 @@ Variables: `{{1}}` nombre · `{{2}}` link ofertas
 
 **SMS**
 
-> {{contact.first_name}}, ÚLTIMA LLAMADA: hoy cierra la oferta de la masterclass. Después de hoy, precio y bonos vuelven a la normalidad. Decide hoy: {{offers_link}} — Mandy
+> {{contact.first_name}}, ÚLTIMA LLAMADA: hoy cierra la oferta de la masterclass. Después de hoy, precio y bonos vuelven a la normalidad. Decide hoy: {{custom_values.offers_link}} — Mandy
 
 ---
 
 ## Checklist de activación en GHL
 
 - [ ] Registrar las 12 plantillas de WhatsApp en Meta (vía GHL) con su categoría correcta
-- [ ] Reemplazar `{{masterclass_link}}`, `{{offers_link}}` y `{{academy_link}}` por los links reales
+- [ ] Reemplazar `{{custom_values.masterclass_link}}`, `{{custom_values.offers_link}}` y `{{custom_values.academy_link}}` por los links reales
 - [ ] Mapear variables `{{1}}`, `{{2}}`… a los custom values / merge fields de GHL en cada workflow
 - [ ] Configurar los triggers: registro → recordatorios; pago fallido/exitoso → transaccionales; asistió-sin-comprar → secuencia D+1/D+2/D+3/D+5
 - [ ] Exportar el HTML de los emails desde la app (historial de AMO en `/editor`)
