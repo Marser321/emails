@@ -18,6 +18,7 @@ export default function Dashboard() {
   const [history, setHistory] = useState<EmailHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [brandFilter, setBrandFilter] = useState('');
   const [toast, setToast] = useState<string | null>(null);
   const mounted = useHydrated();
   const [now] = useState(() => Date.now());
@@ -28,10 +29,14 @@ export default function Dashboard() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const loadHistory = (query: string) => {
+  const loadHistory = (query: string, brandId: string) => {
     setHistoryLoading(true);
-    const params = new URLSearchParams({ limit: '10' });
+    // Sin filtro de marca: solo los 10 más recientes de todo el workspace.
+    // Con una marca elegida, subimos el límite para ver el historial completo
+    // de esa marca (antes, emails más nuevos de OTRAS marcas tapaban estos).
+    const params = new URLSearchParams({ limit: brandId ? '50' : '10' });
     if (query) params.set('q', query);
+    if (brandId) params.set('brandId', brandId);
     fetch(`/api/history?${params}`)
       .then(res => (res.ok ? res.json() : []))
       .then(setHistory)
@@ -46,23 +51,20 @@ export default function Dashboard() {
         setBrandCount(all.length);
       })
       .catch(() => setBrandCount(0));
-    fetch('/api/history?limit=10')
-      .then(res => (res.ok ? res.json() : []))
-      .then(setHistory)
-      .catch(() => setHistory([]))
-      .finally(() => setHistoryLoading(false));
+    loadHistory('', '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Búsqueda con debounce 300ms
+  // Búsqueda con debounce 300ms (el filtro de marca aplica al toque, sin debounce)
   useEffect(() => {
     if (!mounted) return;
     if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => loadHistory(search), 300);
+    searchTimer.current = setTimeout(() => loadHistory(search, brandFilter), 300);
     return () => {
       if (searchTimer.current) clearTimeout(searchTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [search, brandFilter]);
 
   const brandName = (brandId: string) => brands.find(b => b.id === brandId)?.name || 'Marca';
 
@@ -111,16 +113,30 @@ export default function Dashboard() {
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Mail size={17} /> Hoy — Últimos emails
                 </h3>
-                <div className="search-box" style={{ width: 280 }}>
-                  <span className="search-icon" aria-hidden="true"><Search size={15} /></span>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="Buscar por asunto o instrucción…"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    style={{ paddingLeft: 42, fontSize: 12, padding: '8px 12px 8px 42px' }}
-                  />
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <select
+                    className="form-select"
+                    aria-label="Filtrar por marca"
+                    value={brandFilter}
+                    onChange={e => setBrandFilter(e.target.value)}
+                    style={{ fontSize: 12, padding: '8px 10px', width: 180 }}
+                  >
+                    <option value="">Todas las marcas</option>
+                    {brands.map(b => (
+                      <option key={b.id} value={b.id}>{b.isFavorite ? '★ ' : ''}{b.name}</option>
+                    ))}
+                  </select>
+                  <div className="search-box" style={{ width: 280 }}>
+                    <span className="search-icon" aria-hidden="true"><Search size={15} /></span>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Buscar por asunto o instrucción…"
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                      style={{ paddingLeft: 42, fontSize: 12, padding: '8px 12px 8px 42px' }}
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -42,6 +42,15 @@ alter table public.history add column if not exists schema_version integer not n
 alter table public.history alter column schema_version set default 4;
 alter table public.history add column if not exists created_by uuid references auth.users(id) on delete set null;
 
+-- Sin esto, cualquier insert directo a la tabla (fuera de la API/Zod de la app)
+-- puede colar un motor inválido, ej. engine='manual' — ya pasó dos veces.
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'history_engine_check') then
+    alter table public.history add constraint history_engine_check check (engine in ('gemini', 'claude'));
+  end if;
+end $$;
+
 create table if not exists public.drafts (
   id text primary key,
   name text not null,
