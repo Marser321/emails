@@ -12,7 +12,7 @@ import {
   cleanPlainText,
   GENERATE_JSON_SCHEMA,
 } from '../prompts';
-import { parseAbTestResult, parseGeneratedContent } from '../provider-output';
+import { InvalidAIResponseError, parseAbTestResult, parseGeneratedContent } from '../provider-output';
 
 const ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 
@@ -46,6 +46,9 @@ export class GroqProvider implements AIProvider {
     user: string,
     options: { schema?: Record<string, unknown>; maxTokens?: number } = {},
   ): Promise<string> {
+    const systemContent = options.schema
+      ? `${system}\n\nEl objeto debe cumplir exactamente este JSON Schema. Incluye todas las claves requeridas, no agregues claves extra y usa cadenas vacías en vez de null cuando un dato no aplique:\n${JSON.stringify(options.schema)}`
+      : system;
     let response: Response;
     try {
       response = await fetch(ENDPOINT, {
@@ -53,14 +56,14 @@ export class GroqProvider implements AIProvider {
         headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: this.model,
-          messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+          messages: [{ role: 'system', content: systemContent }, { role: 'user', content: user }],
           temperature: 0.7,
           max_completion_tokens: options.maxTokens || 4096,
           ...(options.schema ? {
-            response_format: {
-              type: 'json_schema',
-              json_schema: { name: 'email_builder_response', strict: false, schema: options.schema },
-            },
+            // Llama 3.3 on Groq supports JSON Object Mode, but not Groq's
+            // stricter json_schema response format. The shared prompts define
+            // the contract and provider-output validates it with Zod.
+            response_format: { type: 'json_object' },
           } : {}),
         }),
         signal: AbortSignal.timeout(30_000),
@@ -78,12 +81,21 @@ export class GroqProvider implements AIProvider {
   }
 
   async generate(params: GenerateParams): Promise<Partial<EmailContent>> {
-    const value = await this.complete(
-      buildGenerateSystemPrompt(params.brand, params.examples),
-      buildGenerateUserPrompt(params.prompt, params.templateType, params.brand),
-      { schema: GENERATE_JSON_SCHEMA, maxTokens: 8192 },
-    );
-    return parseGeneratedContent(value);
+    const system = buildGenerateSystemPrompt(params.brand, params.examples);
+    const user = buildGenerateUserPrompt(params.prompt, params.templateType, params.brand);
+    const options = { schema: GENERATE_JSON_SCHEMA, maxTokens: 8192 };
+    const value = await this.complete(system, user, options);
+    try {
+      return parseGeneratedContent(value);
+    } catch (error) {
+      if (!(error instanceof InvalidAIResponseError)) throw error;
+      const retry = await this.complete(
+        system,
+        `${user}\nLa respuesta anterior no cumplió el contrato. Regenera el objeto completo y revisa tipos, claves requeridas y colores hexadecimales.`,
+        options,
+      );
+      return parseGeneratedContent(retry);
+    }
   }
 
   async refine(params: RefineParams): Promise<string> {
@@ -95,11 +107,20 @@ export class GroqProvider implements AIProvider {
   }
 
   async abTest(params: AbTestParams): Promise<AbTestResult> {
-    const value = await this.complete(
-      buildAbSystemPrompt(),
-      buildAbUserPrompt(params.headline, params.body),
-      { schema: ABTEST_JSON_SCHEMA },
-    );
-    return parseAbTestResult(value);
+    const system = buildAbSystemPrompt();
+    const user = buildAbUserPrompt(params.headline, params.body);
+    const options = { schema: ABTEST_JSON_SCHEMA };
+    const value = await this.complete(system, user, options);
+    try {
+      return parseAbTestResult(value);
+    } catch (error) {
+      if (!(error instanceof InvalidAIResponseError)) throw error;
+      const retry = await this.complete(
+        system,
+        `${user}\nLa respuesta anterior no cumplió el contrato. Regenera todas las variantes como un único objeto JSON válido.`,
+        options,
+      );
+      return parseAbTestResult(retry);
+    }
   }
 }

@@ -6,6 +6,7 @@ const PUBLIC_PATHS = ['/login', '/auth/confirm'];
 export async function proxy(request: NextRequest) {
   const isLegacyPublicAsset = request.method === 'GET' && /^\/api\/assets\/[^/]+\/[^/]+$/.test(request.nextUrl.pathname);
   if (isLegacyPublicAsset) return NextResponse.next();
+  const isApi = request.nextUrl.pathname.startsWith('/api/');
   // Modo público (iframe GHL) o bypass de dev: sin verificación de sesión.
   const openAccess = process.env.EMAILBUILDER_OPEN_ACCESS === 'true';
   const bypass = process.env.NODE_ENV !== 'production' && process.env.EMAILBUILDER_AUTH_BYPASS === 'true';
@@ -17,6 +18,9 @@ export async function proxy(request: NextRequest) {
 
   if (!url || !key) {
     if (request.nextUrl.pathname === '/login') return NextResponse.next();
+    if (isApi) {
+      return NextResponse.json({ error: 'La autenticación no está configurada.' }, { status: 503 });
+    }
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = '/login';
     loginUrl.searchParams.set('configuration', 'missing');
@@ -38,6 +42,9 @@ export async function proxy(request: NextRequest) {
 
   const { data } = await supabase.auth.getUser();
   if (!data.user && !isPublic) {
+    if (isApi) {
+      return NextResponse.json({ error: 'No autenticado.' }, { status: 401 });
+    }
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = '/login';
     loginUrl.searchParams.set('next', request.nextUrl.pathname);

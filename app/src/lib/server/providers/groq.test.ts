@@ -26,7 +26,23 @@ describe('GroqProvider', () => {
     const [, init] = fetchMock.mock.calls[0];
     expect(init.headers.Authorization).toBe('Bearer secret-key');
     expect(init.body).not.toContain('secret-key');
-    expect(JSON.parse(init.body).response_format.type).toBe('json_schema');
+    const requestBody = JSON.parse(init.body);
+    expect(requestBody.response_format).toEqual({ type: 'json_object' });
+    expect(requestBody.response_format).not.toHaveProperty('json_schema');
+    expect(requestBody.messages[0].content).toContain('additionalProperties');
+  });
+
+  it('retries once when the model returns valid JSON that fails the shared schema', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ headline: 'Incompleto' }) } }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(generated) } }] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const provider = new GroqProvider('secret-key', 'llama-test');
+
+    await expect(provider.generate({ prompt: 'Crea un email', templateType: 'newsletter', brand, examples: [] })).resolves.toEqual(generated);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const retryBody = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(retryBody.messages[1].content).toContain('no cumplió el contrato');
   });
 
   it('maps rate limits to a useful message', async () => {

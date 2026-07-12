@@ -210,7 +210,7 @@ Cuerpo del Email: "${body || ''}"
 `;
 }
 
-// JSON Schemas — usados por Claude (output_config.format garantiza JSON válido)
+// JSON Schemas — usados por los proveedores que admiten validación de esquema nativa.
 export const GENERATE_JSON_SCHEMA = {
   type: 'object',
   properties: {

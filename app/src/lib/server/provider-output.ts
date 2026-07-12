@@ -38,14 +38,25 @@ function parseJson(text: string): unknown {
   }
 }
 
+function issueSummary(error: z.ZodError): string {
+  return error.issues
+    .slice(0, 5)
+    .map(issue => `${issue.path.join('.') || 'respuesta'}: ${issue.code}`)
+    .join(', ');
+}
+
 export function parseGeneratedContent(text: string): Partial<EmailContent> {
   const parsed = generatedContentSchema.safeParse(parseJson(text));
-  if (!parsed.success) throw new InvalidAIResponseError();
+  if (!parsed.success) {
+    throw new InvalidAIResponseError(`El proveedor devolvió contenido incompleto o inválido (${issueSummary(parsed.error)}).`);
+  }
   return parsed.data;
 }
 
 export function parseAbTestResult(text: string): AbTestResult {
   const parsed = abTestResultSchema.safeParse(parseJson(text));
-  if (!parsed.success) throw new InvalidAIResponseError('El proveedor devolvió variantes con formato inválido.');
+  if (!parsed.success) {
+    throw new InvalidAIResponseError(`El proveedor devolvió variantes inválidas (${issueSummary(parsed.error)}).`);
+  }
   return parsed.data;
 }
