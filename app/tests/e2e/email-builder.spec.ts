@@ -99,13 +99,20 @@ test('GHL embed exchanges the URL fragment for a secure session without showing 
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
 });
 
-test('private login has no public registration', async ({ page }) => {
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
+test('team password opens a direct private session', async ({ page, context }) => {
+  await page.goto('/login?next=/editor', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'Entra a tu workspace' })).toBeVisible();
   await expect(page.getByText(/No hay registro p.blico/)).toBeVisible();
+  await expect(page.getByLabel('Contraseña del equipo')).toBeVisible();
   await expectNoPageOverflow(page);
   await settleForScreenshot(page);
   await expect(page).toHaveScreenshot('login.png', { fullPage: true });
+
+  await page.getByLabel('Contraseña del equipo').fill('e2e-team-password-that-is-longer-than-16');
+  await page.getByRole('button', { name: 'Entrar al workspace' }).click();
+  await expect(page).toHaveURL('http://localhost:3000/editor');
+  const sessionCookie = (await context.cookies()).find(cookie => cookie.name === 'emailbuilder_team');
+  expect(sessionCookie).toMatchObject({ httpOnly: true, secure: true, sameSite: 'Lax' });
 });
 
 for (const viewport of [

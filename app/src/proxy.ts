@@ -4,6 +4,7 @@ import {
   EMBED_COOKIE_NAME,
   isValidEmbedSessionCookie,
 } from '@/lib/server/embed-access';
+import { isValidTeamSessionCookie, TEAM_COOKIE_NAME } from '@/lib/server/team-access';
 
 const PUBLIC_PATHS = ['/login', '/auth/confirm', '/embed'];
 
@@ -12,6 +13,8 @@ export async function proxy(request: NextRequest) {
   if (isLegacyPublicAsset) return NextResponse.next();
   const isEmbedBootstrap = request.method === 'POST' && request.nextUrl.pathname === '/api/embed/session';
   if (isEmbedBootstrap) return NextResponse.next();
+  const isTeamAuth = ['POST', 'DELETE'].includes(request.method) && request.nextUrl.pathname === '/api/auth/team';
+  if (isTeamAuth) return NextResponse.next();
   const isApi = request.nextUrl.pathname.startsWith('/api/');
   // Modo público (iframe GHL) o bypass de dev: sin verificación de sesión.
   const openAccess = process.env.EMAILBUILDER_OPEN_ACCESS === 'true';
@@ -19,7 +22,8 @@ export async function proxy(request: NextRequest) {
   if (openAccess || bypass) return NextResponse.next();
 
   const hasEmbedSession = isValidEmbedSessionCookie(request.cookies.get(EMBED_COOKIE_NAME)?.value);
-  if (hasEmbedSession) {
+  const hasTeamSession = isValidTeamSessionCookie(request.cookies.get(TEAM_COOKIE_NAME)?.value);
+  if (hasEmbedSession || hasTeamSession) {
     const isUnsafeApiMethod = isApi && !['GET', 'HEAD', 'OPTIONS'].includes(request.method);
     if (isUnsafeApiMethod && request.headers.get('origin') !== request.nextUrl.origin) {
       return NextResponse.json({ error: 'Origen no permitido.' }, { status: 403 });

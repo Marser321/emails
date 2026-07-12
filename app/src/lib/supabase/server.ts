@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { getSupabasePublicConfig, isAuthBypassEnabled, isOpenAccessEnabled } from '@/lib/server/env';
 import { hasValidEmbedSession } from '@/lib/server/embed-session';
+import { hasValidTeamSession } from '@/lib/server/team-session';
 
 export async function createServerSupabase() {
   const config = getSupabasePublicConfig();
@@ -18,10 +19,11 @@ export async function createServerSupabase() {
   // saltea pero todas las lecturas fallan con "permission denied".
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const embedAccess = await hasValidEmbedSession();
-  if ((isOpenAccessEnabled() || embedAccess) && !serviceKey) {
+  const teamAccess = await hasValidTeamSession();
+  if ((isOpenAccessEnabled() || embedAccess || teamAccess) && !serviceKey) {
     throw new Error('El acceso sin login está activo pero falta SUPABASE_SERVICE_ROLE_KEY');
   }
-  if ((isOpenAccessEnabled() || isAuthBypassEnabled() || embedAccess) && serviceKey) {
+  if ((isOpenAccessEnabled() || isAuthBypassEnabled() || embedAccess || teamAccess) && serviceKey) {
     return createClient(config.url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
