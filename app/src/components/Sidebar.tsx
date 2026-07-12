@@ -26,6 +26,7 @@ export default function Sidebar() {
 
   async function signOut() {
     try {
+      await fetch('/api/auth/team', { method: 'DELETE' });
       await createClient().auth.signOut();
     } finally {
       window.location.assign('/login');

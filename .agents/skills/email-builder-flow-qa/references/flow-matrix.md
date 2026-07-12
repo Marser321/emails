@@ -41,12 +41,13 @@
 
 ### Security and production
 
-1. Confirm private pages redirect unauthenticated users, while a valid GHL embed session opens without login.
-2. Confirm private APIs return 401 without a Supabase or GHL embed session.
+1. Confirm private pages redirect unauthenticated users, while a valid GHL embed session opens without login and a valid team password opens direct access.
+2. Confirm private APIs return 401 without a Supabase, GHL embed, or team password session.
 3. Confirm asset reads are public but writes require authentication.
 4. Confirm no `NEXT_PUBLIC_` secret and no secret values in logs or reports.
 5. Confirm dev bypass, unrestricted open access, and Ethereal are disabled in production.
 6. Confirm the GHL token is exchanged from a URL fragment, removed before navigation, stored only as a derived HttpOnly partitioned cookie, and cross-origin writes return 403.
+7. Confirm the team password stays server-only, is exchanged for a derived HttpOnly Secure SameSite=Lax cookie, invalid passwords return 401, and logout clears the cookie.
 
 ## Failure classification
 

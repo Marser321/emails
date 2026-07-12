@@ -2,29 +2,36 @@
 
 import { FormEvent, useState } from 'react';
 import Image from 'next/image';
-import { ArrowRight, CheckCircle2, Loader2, Mail } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { ArrowRight, CheckCircle2, Loader2, LockKeyhole } from 'lucide-react';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [status, setStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [password, setPassword] = useState('');
+  const [status, setStatus] = useState<'idle' | 'sending'>('idle');
   const [error, setError] = useState('');
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
     setStatus('sending');
-    const redirectTo = `${window.location.origin}/auth/confirm`;
-    const { error: authError } = await createClient().auth.signInWithOtp({
-      email: email.trim(),
-      options: { shouldCreateUser: false, emailRedirectTo: redirectTo },
-    });
-    if (authError) {
-      setError('No pudimos enviar el acceso. Verifica que tu correo pertenezca al equipo.');
+    try {
+      const response = await fetch('/api/auth/team', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        setError(payload.error || 'No pudimos validar la contraseña.');
+        setStatus('idle');
+        return;
+      }
+      const requestedPath = new URLSearchParams(window.location.search).get('next');
+      const destination = requestedPath?.startsWith('/') && !requestedPath.startsWith('//') ? requestedPath : '/';
+      window.location.assign(destination);
+    } catch {
+      setError('No pudimos conectar con el servidor. Inténtalo de nuevo.');
       setStatus('idle');
-      return;
     }
-    setStatus('sent');
   }
 
   return (
@@ -47,28 +54,20 @@ export default function LoginPage() {
 
       <section className="login-form-panel">
         <div className="login-card">
-          <div className="login-card-icon"><Mail size={22} /></div>
+          <div className="login-card-icon"><LockKeyhole size={22} /></div>
           <p className="eyebrow">Workspace privado</p>
           <h2>Entra a tu workspace</h2>
-          <p className="login-intro">Te enviaremos un enlace seguro al correo autorizado de tu equipo.</p>
+          <p className="login-intro">Usa la contraseña compartida del equipo para acceder desde este enlace.</p>
 
-          {status === 'sent' ? (
-            <div className="login-success" role="status">
-              <CheckCircle2 size={22} />
-              <strong>Revisa tu bandeja de entrada</strong>
-              <span>El enlace de acceso fue enviado a {email}.</span>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="login-form">
-              <label htmlFor="login-email">Correo del equipo</label>
-              <input id="login-email" type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="nombre@empresa.com" />
-              {error ? <p className="login-error" role="alert">{error}</p> : null}
-              <button className="btn btn-primary" type="submit" disabled={status === 'sending'}>
-                {status === 'sending' ? <><Loader2 className="spin" size={17} /> Enviando acceso</> : <>Recibir enlace seguro <ArrowRight size={17} /></>}
-              </button>
-            </form>
-          )}
-          <p className="login-private-note">No hay registro público. Solo pueden acceder correos habilitados por AD Media Solution.</p>
+          <form onSubmit={handleSubmit} className="login-form">
+            <label htmlFor="login-password">Contraseña del equipo</label>
+            <input id="login-password" type="password" autoComplete="current-password" required value={password} onChange={event => setPassword(event.target.value)} placeholder="Ingresa la contraseña compartida" />
+            {error ? <p className="login-error" role="alert">{error}</p> : null}
+            <button className="btn btn-primary" type="submit" disabled={status === 'sending'}>
+              {status === 'sending' ? <><Loader2 className="spin" size={17} /> Validando acceso</> : <>Entrar al workspace <ArrowRight size={17} /></>}
+            </button>
+          </form>
+          <p className="login-private-note">No hay registro público. Comparte esta contraseña únicamente con miembros del equipo.</p>
         </div>
       </section>
     </main>

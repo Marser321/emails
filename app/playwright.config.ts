@@ -20,6 +20,7 @@ export default defineConfig({
     env: {
       EMAILBUILDER_AUTH_BYPASS: 'true',
       EMAILBUILDER_EMBED_TOKEN: 'e2e-embed-secret-that-is-longer-than-32-characters',
+      EMAILBUILDER_TEAM_PASSWORD: 'e2e-team-password-that-is-longer-than-16',
       NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
     },
   },

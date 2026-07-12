@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { isAuthBypassEnabled, isOpenAccessEnabled, isSupabaseConfigured } from '@/lib/server/env';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { hasValidEmbedSession } from './embed-session';
+import { hasValidTeamSession } from './team-session';
 
 // Devuelve el id solo si es un UUID válido; si no (usuario de sistema en modo
 // abierto/bypass), null — así created_by no rompe la FK a auth.users.
@@ -38,11 +39,13 @@ const LOCAL_USER = {
 // propósito: toUuidOrNull lo convierte en null al escribir created_by.
 const OPEN_ACCESS_USER = { ...LOCAL_USER, id: 'open-access', email: 'workspace@admediasolution.com' } as User;
 const EMBED_USER = { ...LOCAL_USER, id: 'ghl-embed', email: 'ghl@admediasolution.com' } as User;
+const TEAM_USER = { ...LOCAL_USER, id: 'team-access', email: 'team@admediasolution.com' } as User;
 
 export async function requireUser(): Promise<User> {
   if (isOpenAccessEnabled()) return OPEN_ACCESS_USER;
   if (isAuthBypassEnabled()) return LOCAL_USER;
   if (await hasValidEmbedSession()) return EMBED_USER;
+  if (await hasValidTeamSession()) return TEAM_USER;
   if (!isSupabaseConfigured()) throw new AuthenticationError('Supabase no está configurado');
 
   const supabase = await createServerSupabase();
