@@ -24,9 +24,21 @@ try {
 
   await page.goto(`${baseUrl}/login?next=/`, { waitUntil: 'domcontentloaded' });
   await page.getByLabel('Contraseña del equipo').fill(password);
-  const authResponsePromise = page.waitForResponse(response => response.url() === `${baseUrl}/api/auth/team`);
+  const authResponsePromise = page.waitForResponse(
+    response => new URL(response.url()).pathname === '/api/auth/team',
+    { timeout: 10_000 },
+  ).catch(() => null);
   await page.getByRole('button', { name: 'Entrar al workspace' }).click();
   const authResponse = await authResponsePromise;
+  if (!authResponse) {
+    throw new Error(JSON.stringify({
+      reason: 'team auth request was not observed',
+      currentUrl: page.url(),
+      passwordInputCount: await page.getByLabel('Contraseña del equipo').count(),
+      submitDisabled: await page.getByRole('button', { name: /Entrar al workspace|Validando acceso/ }).isDisabled().catch(() => null),
+      browserFailures: failures,
+    }));
+  }
   await page.waitForURL(`${baseUrl}/`, { timeout: 30_000 }).catch(() => undefined);
 
   if (page.url() !== `${baseUrl}/`) {
