@@ -7,4 +7,5 @@ app/.next/
 app/tsconfig.tsbuildinfo
 .vercel
 .env*
+env_dump*.txt
 app/data/assets

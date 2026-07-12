@@ -20,5 +20,11 @@ describe('contrato de seguridad de Supabase', () => {
   it('elimina las columnas legacy de secretos', () => {
     expect(schema).toContain('drop column if exists gemini_api_key');
     expect(schema).toContain('drop column if exists anthropic_api_key');
+    expect(schema).toContain('drop column if exists groq_api_key');
+  });
+
+  it('admite Groq sin relajar los constraints de motores', () => {
+    expect(schema).toContain("engine in ('gemini', 'groq', 'claude')");
+    expect(schema).toContain("default_engine in ('gemini', 'groq', 'claude')");
   });
 });

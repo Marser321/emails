@@ -31,7 +31,7 @@ export default function LoginPage() {
     <main className="login-page">
       <section className="login-brand-panel" aria-label="Email Studio">
         <div className="login-brand-mark">
-          <Image src="/logo-white.png" alt="AD Media Solution" width={176} height={54} style={{ width: 176, height: 'auto' }} priority />
+          <Image src="/logo-white.png" alt="AD Media Solution" width={176} height={21} priority />
         </div>
         <div className="login-brand-copy">
           <p className="eyebrow">Estudio editorial de email</p>

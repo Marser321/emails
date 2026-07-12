@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { EmailDocumentV3, EmailDocumentV4 } from '@/lib/types';
 import { sanitizeEmailUrl } from '@/lib/email-safety';
 
-export const engineSchema = z.enum(['gemini', 'claude']);
+export const engineSchema = z.enum(['gemini', 'groq', 'claude']);
 export const templateSchema = z.enum([
   'masterclass', 'registration', 'followup', 'promo', 'reminder',
   'newsletter', 'sales', 'financial_advisory', 'onboarding',

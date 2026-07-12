@@ -1,12 +1,12 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { NextResponse } from 'next/server';
-import sharp from 'sharp';
 import { z, ZodError } from 'zod';
 import type { EmailAsset } from '@/lib/types';
 import { AuthenticationError, requireUser, toUuidOrNull } from '@/lib/server/auth';
 import { isSupabaseConfigured } from '@/lib/server/env';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { InvalidAssetImageError, processAssetImage } from '@/lib/server/asset-processing';
 
 const BUCKET = 'assets';
 const MAX_SIZE_BYTES = 8 * 1024 * 1024;
@@ -23,6 +23,7 @@ interface AssetRow {
   width: number;
   height: number;
   mime_type: string;
+  has_alpha: boolean | null;
   byte_size: number;
   created_by: string | null;
   created_at: string;
@@ -44,7 +45,10 @@ function sanitizeFilename(filename: string): string {
 async function starterAssets(): Promise<EmailAsset[]> {
   try {
     const raw = await fs.readFile(path.join(process.cwd(), 'public', 'email-assets', 'manifest.json'), 'utf8');
-    return JSON.parse(raw) as EmailAsset[];
+    return (JSON.parse(raw) as EmailAsset[]).map(asset => ({
+      ...asset,
+      hasAlpha: asset.hasAlpha ?? asset.mimeType === 'image/png',
+    }));
   } catch {
     return [];
   }
@@ -69,6 +73,7 @@ function mapRow(supabase: Awaited<ReturnType<typeof createServerSupabase>>, row:
     width: row.width,
     height: row.height,
     mimeType: row.mime_type,
+    hasAlpha: row.has_alpha ?? false,
     variant: 'email',
     createdBy: row.created_by || undefined,
     author: row.author,
@@ -132,33 +137,8 @@ export async function POST(req: Request) {
     const altText = z.string().trim().min(1).max(240).parse(String(form.get('altText') || file.name.replace(/\.[^.]+$/, '')));
     const author = z.string().trim().min(1).max(120).parse(String(form.get('author') || user.email || 'Equipo interno'));
     const input = Buffer.from(await file.arrayBuffer());
-    const image = sharp(input, { animated: false, failOn: 'error' }).rotate();
-    const metadata = await image.metadata();
-    if (!metadata.width || !metadata.height || !['jpeg', 'png', 'webp', 'gif'].includes(metadata.format || '')) {
-      return NextResponse.json({ error: 'La imagen no tiene un formato válido' }, { status: 400 });
-    }
-
     const base = `${sanitizeFilename(file.name)}-${Date.now().toString(36)}`;
-    let emailBuffer: Buffer;
-    let width: number;
-    let height: number;
-    let extension: string;
-    let mimeType: string;
-
-    if (kind === 'logo' || kind === 'icon') {
-      const maxWidth = kind === 'icon' ? 96 : 600;
-      const maxHeight = kind === 'icon' ? 96 : 300;
-      emailBuffer = await image.clone().resize(maxWidth, maxHeight, { fit: 'inside', withoutEnlargement: true }).png({ compressionLevel: 9 }).toBuffer();
-      const output = await sharp(emailBuffer).metadata();
-      width = output.width || maxWidth; height = output.height || maxHeight; extension = 'png'; mimeType = 'image/png';
-    } else {
-      const target = kind === 'hero' ? { width: 1200, height: 600 } : kind === 'tile' ? { width: 800, height: 800 } : { width: 1200, height: 1200 };
-      emailBuffer = await image.clone().resize(target.width, target.height, { fit: kind === 'other' ? 'inside' : 'cover', withoutEnlargement: kind === 'other' }).jpeg({ quality: 82, mozjpeg: true }).toBuffer();
-      const output = await sharp(emailBuffer).metadata();
-      width = output.width || target.width; height = output.height || target.height; extension = 'jpg'; mimeType = 'image/jpeg';
-    }
-
-    const thumbnailBuffer = await sharp(emailBuffer).resize(320, 320, { fit: 'cover' }).webp({ quality: 76 }).toBuffer();
+    const { emailBuffer, thumbnailBuffer, width, height, extension, mimeType, hasAlpha } = await processAssetImage(input, kind);
     const storagePath = `${brandId}/${kind}/${base}.${extension}`;
     const thumbnailPath = `${brandId}/${kind}/${base}-thumb.webp`;
     const supabase = await createServerSupabase();
@@ -170,7 +150,8 @@ export async function POST(req: Request) {
 
     const { data, error } = await supabase.from('assets').insert({
       brand_id: brandId, filename: `${base}.${extension}`, storage_path: storagePath, thumbnail_path: thumbnailPath,
-      kind, alt_text: altText, width, height, mime_type: mimeType, byte_size: emailBuffer.length, created_by: toUuidOrNull(user.id),
+      kind, alt_text: altText, width, height, mime_type: mimeType, has_alpha: hasAlpha,
+      byte_size: emailBuffer.length, created_by: toUuidOrNull(user.id),
       author,
     }).select().single();
     if (error) {
@@ -179,6 +160,7 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ asset: mapRow(supabase, data as AssetRow) }, { status: 201 });
   } catch (error) {
+    if (error instanceof InvalidAssetImageError) return NextResponse.json({ error: error.message }, { status: 400 });
     if (error instanceof ZodError) return NextResponse.json({ error: error.issues[0]?.message || 'Datos inválidos' }, { status: 400 });
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Error al subir el archivo' }, { status: error instanceof AuthenticationError ? 401 : 500 });
   }

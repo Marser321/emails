@@ -24,6 +24,10 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
   const [brandId] = useState(() => brand?.id || generateBrandId());
   const [logoPickerOpen, setLogoPickerOpen] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoDragOver, setLogoDragOver] = useState(false);
+  const [logoError, setLogoError] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [logoHasAlpha, setLogoHasAlpha] = useState<boolean | null>(null);
   const logoFileRef = useRef<HTMLInputElement>(null);
 
   // Estados para importación automática desde URL
@@ -137,6 +141,7 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
 
   const handleSave = async () => {
     if (!form.name.trim()) return;
+    setSaveError('');
 
     const data: Partial<Brand> = {
       name: form.name.trim(),
@@ -181,7 +186,7 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
       onSaved();
     } catch (err) {
       console.error('Error saving brand', err);
-      alert('Error al guardar la marca. Revisa que el servidor esté corriendo.');
+      setSaveError(err instanceof Error ? err.message : 'Error al guardar la marca. Revisa el servidor.');
     }
   };
 
@@ -189,20 +194,40 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleLogoFile = async (file: File) => {
+    setUploadingLogo(true);
+    setLogoError('');
+    try {
+      const asset = await uploadAsset(file, brandId, {
+        kind: 'logo',
+        altText: form.name.trim() ? `Logo de ${form.name.trim()}` : file.name.replace(/\.[^.]+$/, ''),
+      });
+      updateField('logoValue', asset.url);
+      setLogoHasAlpha(asset.hasAlpha);
+    } catch (err) {
+      console.error('Error uploading logo', err);
+      setLogoError(err instanceof Error ? err.message : 'No se pudo subir el logo.');
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
   // Logo preview
   const logoPreview = () => {
     if (form.logoType === 'image' && form.logoValue) {
+      const surfaces = [
+        { label: 'Claro', background: '#ffffff', nameColor: '#0b2a4a' },
+        { label: 'Oscuro', background: form.colorPrimary, nameColor: '#ffffff' },
+        { label: 'Transparencia', background: 'repeating-conic-gradient(#dce3e8 0 25%, #ffffff 0 50%) 50% / 18px 18px', nameColor: '#0b2a4a' },
+      ];
       return (
-        <div style={{
-          padding: '16px', background: form.colorPrimary, borderRadius: 'var(--radius-md)', textAlign: 'center',
-          display: 'flex', flexDirection: form.logoShowName && form.logoNamePosition === 'below' ? 'column' : 'row',
-          alignItems: 'center', justifyContent: 'center', gap: 10,
-        }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={form.logoValue} alt="Logo preview" style={{ maxWidth: form.logoImageWidth, height: 'auto' }} />
-          {form.logoShowName && form.name && (
-            <span style={{ color: '#fff', fontSize: 20, fontWeight: 800 }}>{form.name}</span>
-          )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1, background: 'var(--border-subtle)' }}>
+          {surfaces.map(surface => <div key={surface.label} style={{ minHeight: 132, padding: '28px 12px 14px', background: surface.background, position: 'relative', textAlign: 'center', display: 'flex', flexDirection: form.logoShowName && form.logoNamePosition === 'below' ? 'column' : 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <span style={{ position: 'absolute', top: 8, left: 10, color: surface.nameColor, opacity: 0.65, fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.7 }}>{surface.label}</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={form.logoValue} alt={`Logo sobre fondo ${surface.label.toLowerCase()}`} style={{ width: '100%', maxWidth: Math.min(form.logoImageWidth, 180), height: 'auto', maxHeight: 76, objectFit: 'contain' }} />
+            {form.logoShowName && form.name && <span style={{ color: surface.nameColor, fontSize: 14, fontWeight: 800 }}>{form.name}</span>}
+          </div>)}
         </div>
       );
     }
@@ -386,7 +411,7 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
                       aria-label="URL del logo"
                       className="form-input"
                       value={form.logoValue}
-                      onChange={e => updateField('logoValue', e.target.value)}
+                      onChange={e => { updateField('logoValue', e.target.value); setLogoHasAlpha(null); }}
                       placeholder="URL o imagen subida del logo…"
                       spellCheck={false}
                     />
@@ -395,11 +420,19 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
                       aria-label="Ancho en píxeles"
                       className="form-input"
                       value={form.logoImageWidth}
-                      onChange={e => updateField('logoImageWidth', parseInt(e.target.value) || 180)}
+                      min={40}
+                      max={600}
+                      onChange={e => updateField('logoImageWidth', Math.min(600, Math.max(40, parseInt(e.target.value) || 180)))}
                       placeholder="Ancho px"
                     />
                   </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <input type="range" min={40} max={600} value={form.logoImageWidth} onChange={e => updateField('logoImageWidth', Number(e.target.value))} aria-label="Ajustar ancho visual del logo" />
+                  <div
+                    onDragOver={event => { event.preventDefault(); setLogoDragOver(true); }}
+                    onDragLeave={() => setLogoDragOver(false)}
+                    onDrop={event => { event.preventDefault(); setLogoDragOver(false); const file = event.dataTransfer.files[0]; if (file) void handleLogoFile(file); }}
+                    style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: 10, border: `1px dashed ${logoDragOver ? 'var(--accent)' : 'var(--border-hover)'}`, borderRadius: 'var(--radius-sm)', background: logoDragOver ? 'var(--accent-glow)' : 'transparent' }}
+                  >
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
@@ -422,23 +455,20 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
                       type="file"
                       accept=".png,.jpg,.jpeg,.gif,.webp"
                       hidden
-                      onChange={async e => {
+                      onChange={e => {
                         const file = e.target.files?.[0];
                         e.target.value = '';
                         if (!file) return;
-                        setUploadingLogo(true);
-                        try {
-                          const asset = await uploadAsset(file, brandId);
-                          updateField('logoValue', asset.url);
-                        } catch (err) {
-                          console.error('Error uploading logo', err);
-                          alert('Error al subir el logo');
-                        } finally {
-                          setUploadingLogo(false);
-                        }
+                        void handleLogoFile(file);
                       }}
                     />
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>o arrastra aquí</span>
                   </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                    PNG o WebP transparente recomendado · máximo 8 MB. SVG no se admite por seguridad.
+                    {logoHasAlpha !== null && <strong style={{ marginLeft: 6, color: logoHasAlpha ? '#34d399' : '#fbbf24' }}>{logoHasAlpha ? '✓ Transparencia detectada' : 'Sin transparencia detectada'}</strong>}
+                  </div>
+                  {logoError && <div role="alert" style={{ color: '#f87171', fontSize: 12 }}>{logoError}</div>}
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                     <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
                       <input
@@ -630,6 +660,7 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
           </div>
 
           <div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-primary)' }}>
+            {saveError && <div role="alert" style={{ flex: 1, color: '#f87171', fontSize: 12 }}>{saveError}</div>}
             <button className="btn btn-ghost" onClick={onClose} style={{ marginRight: 8 }}>Cancelar</button>
             <button className="btn btn-primary" onClick={handleSave} disabled={!form.name.trim()}>
               {isEditing ? '💾 Guardar cambios' : '➕ Crear marca'}
@@ -642,9 +673,11 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
         <AssetPicker
           brandId={brandId}
           title="Elegir logo"
+          initialKind="logo"
           onClose={() => setLogoPickerOpen(false)}
           onSelect={asset => {
             updateField('logoValue', asset.url);
+            setLogoHasAlpha(asset.hasAlpha ?? null);
             setLogoPickerOpen(false);
           }}
         />

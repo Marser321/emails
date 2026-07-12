@@ -1,0 +1,4 @@
+interface:
+  display_name: "Email Builder Flow QA"
+  short_description: "Run the Email Builder regression and QA loop"
+  default_prompt: "Use $email-builder-flow-qa to test the complete app flow, diagnose failures, and report production readiness."

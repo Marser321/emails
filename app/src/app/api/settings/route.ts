@@ -4,6 +4,7 @@ import { settingsPatchSchema, validationMessage } from '@/lib/server/api-schemas
 import { requireUser, AuthenticationError } from '@/lib/server/auth';
 import { getSupabasePublicConfig } from '@/lib/server/env';
 import { getSettings, saveSettings } from '@/lib/server/settingsStore';
+import { providerAvailability } from '@/lib/server/provider-registry';
 
 // Base pública del bucket de assets — los /api/assets/<brand>/<file> del HTML
 // se pueden reescribir a esta URL sin subir nada a un CDN aparte.
@@ -14,9 +15,11 @@ function supabaseAssetsBaseUrl(): string {
 
 async function publicSettings() {
   const settings = await getSettings();
+  const providers = providerAvailability();
   return {
-    hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
-    hasAnthropicKey: Boolean(process.env.ANTHROPIC_API_KEY),
+    hasGeminiKey: providers.gemini,
+    hasGroqKey: providers.groq,
+    hasAnthropicKey: providers.claude,
     defaultEngine: settings.defaultEngine,
     assetsPublicBaseUrl: settings.assetsPublicBaseUrl || '',
     supabaseAssetsBaseUrl: supabaseAssetsBaseUrl(),
