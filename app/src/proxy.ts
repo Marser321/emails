@@ -1,16 +1,32 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import {
+  EMBED_COOKIE_NAME,
+  isValidEmbedSessionCookie,
+} from '@/lib/server/embed-access';
 
-const PUBLIC_PATHS = ['/login', '/auth/confirm'];
+const PUBLIC_PATHS = ['/login', '/auth/confirm', '/embed'];
 
 export async function proxy(request: NextRequest) {
   const isLegacyPublicAsset = request.method === 'GET' && /^\/api\/assets\/[^/]+\/[^/]+$/.test(request.nextUrl.pathname);
   if (isLegacyPublicAsset) return NextResponse.next();
+  const isEmbedBootstrap = request.method === 'POST' && request.nextUrl.pathname === '/api/embed/session';
+  if (isEmbedBootstrap) return NextResponse.next();
   const isApi = request.nextUrl.pathname.startsWith('/api/');
   // Modo público (iframe GHL) o bypass de dev: sin verificación de sesión.
   const openAccess = process.env.EMAILBUILDER_OPEN_ACCESS === 'true';
   const bypass = process.env.NODE_ENV !== 'production' && process.env.EMAILBUILDER_AUTH_BYPASS === 'true';
   if (openAccess || bypass) return NextResponse.next();
+
+  const hasEmbedSession = isValidEmbedSessionCookie(request.cookies.get(EMBED_COOKIE_NAME)?.value);
+  if (hasEmbedSession) {
+    const isUnsafeApiMethod = isApi && !['GET', 'HEAD', 'OPTIONS'].includes(request.method);
+    if (isUnsafeApiMethod && request.headers.get('origin') !== request.nextUrl.origin) {
+      return NextResponse.json({ error: 'Origen no permitido.' }, { status: 403 });
+    }
+    if (request.nextUrl.pathname === '/login') return NextResponse.redirect(new URL('/', request.url));
+    return NextResponse.next();
+  }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

@@ -89,6 +89,16 @@ async function settleForScreenshot(page: import('@playwright/test').Page) {
   await page.waitForTimeout(100);
 }
 
+test('GHL embed exchanges the URL fragment for a secure session without showing login', async ({ page, context }) => {
+  await page.goto('/embed#token=e2e-embed-secret-that-is-longer-than-32-characters');
+  await expect(page).toHaveURL('http://localhost:3000/');
+  expect(page.url()).not.toContain('token=');
+
+  const sessionCookie = (await context.cookies()).find(cookie => cookie.name === 'emailbuilder_embed');
+  expect(sessionCookie).toMatchObject({ httpOnly: true, secure: true, sameSite: 'None' });
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+});
+
 test('private login has no public registration', async ({ page }) => {
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'Entra a tu workspace' })).toBeVisible();
