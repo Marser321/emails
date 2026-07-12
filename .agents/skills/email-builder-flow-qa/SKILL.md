@@ -28,6 +28,14 @@ node .agents/skills/email-builder-flow-qa/scripts/run-flow-loop.mjs --live
 
 Require server-only provider keys. Never print, copy, persist, or include key values in reports. Send only non-sensitive marketing prompts to free tiers.
 
+## Live GHL embed check
+
+After deploying a preview with `EMAILBUILDER_EMBED_TOKEN`, run the dedicated smoke without placing the token in command arguments or reports:
+
+```text
+node --env-file=app/.env.local .agents/skills/email-builder-flow-qa/scripts/smoke-embed.mjs https://preview.example.com
+```
+
 ## Guardrails
 
 - Keep deterministic E2E tests mocked; keep real-provider smoke tests opt-in.
@@ -35,5 +43,6 @@ Require server-only provider keys. Never print, copy, persist, or include key va
 - Verify transparent logos from decoded output metadata, not file extension.
 - Treat generation success without a persisted history entry as a degraded failure.
 - Verify a reopened history entry matches the latest saved subject, blocks, styles, and HTML.
-- Keep private production routes authenticated and confirm anonymous API requests return 401.
+- Keep production protected by Supabase Auth or a valid GHL embed session; confirm anonymous and invalid-token API requests return 401.
+- For GHL embeds, verify the token stays in the URL fragment, the clean URL has no token, and the session cookie is HttpOnly, Secure, SameSite=None, and Partitioned.
 - Stop and report environment blockers separately from code defects.

@@ -17,6 +17,10 @@ export default defineConfig({
     url: 'http://localhost:3000',
     reuseExistingServer: true,
     timeout: 120_000,
-    env: { EMAILBUILDER_AUTH_BYPASS: 'true', NEXT_PUBLIC_APP_URL: 'http://localhost:3000' },
+    env: {
+      EMAILBUILDER_AUTH_BYPASS: 'true',
+      EMAILBUILDER_EMBED_TOKEN: 'e2e-embed-secret-that-is-longer-than-32-characters',
+      NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
+    },
   },
 });

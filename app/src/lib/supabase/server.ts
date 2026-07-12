@@ -4,6 +4,7 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { getSupabasePublicConfig, isAuthBypassEnabled, isOpenAccessEnabled } from '@/lib/server/env';
+import { hasValidEmbedSession } from '@/lib/server/embed-session';
 
 export async function createServerSupabase() {
   const config = getSupabasePublicConfig();
@@ -16,10 +17,11 @@ export async function createServerSupabase() {
   // queda como rol `anon`, que no tiene GRANT sobre las tablas — el login se
   // saltea pero todas las lecturas fallan con "permission denied".
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (isOpenAccessEnabled() && !serviceKey) {
-    throw new Error('EMAILBUILDER_OPEN_ACCESS está activo pero falta SUPABASE_SERVICE_ROLE_KEY');
+  const embedAccess = await hasValidEmbedSession();
+  if ((isOpenAccessEnabled() || embedAccess) && !serviceKey) {
+    throw new Error('El acceso sin login está activo pero falta SUPABASE_SERVICE_ROLE_KEY');
   }
-  if ((isOpenAccessEnabled() || isAuthBypassEnabled()) && serviceKey) {
+  if ((isOpenAccessEnabled() || isAuthBypassEnabled() || embedAccess) && serviceKey) {
     return createClient(config.url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
