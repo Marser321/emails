@@ -44,6 +44,29 @@ describe('buildExamplesBlock', () => {
     expect(block).toContain('aprobados');
     expect(block).not.toContain('RECHAZADOS');
   });
+
+  // Post-refactor D: el contenido vive en content.blocks[] y los campos legacy
+  // quedan vacíos; los ejemplos few-shot deben leer el texto desde los bloques.
+  it('extrae el texto de content.blocks[] cuando los campos legacy están vacíos', () => {
+    const entry = {
+      ...makeEntry('up', 'ignorado'),
+      content: {
+        label: '', headline: '', body: '', bulletsTitle: '', bullets: [],
+        ctaText: '', ctaUrl: '', eventDate: '', eventTime: '', preCta: '', footerNote: '',
+        emailBgColor: '#ffffff', bodyBgColor: '#ffffff', textureUrl: '', headerTextureUrl: '', layout: 'classic',
+        blocks: [
+          { id: 'h', type: 'header' },
+          { id: 't', type: 'text', label: 'ETIQUETA-BLOQUE', headline: 'Titular desde bloque', body: 'Cuerpo desde bloque' },
+          { id: 'c', type: 'cta', ctaText: 'CTA desde bloque', ctaUrl: 'https://x.com' },
+          { id: 'f', type: 'footer' },
+        ],
+      },
+    } as unknown as EmailHistoryEntry;
+    const block = buildExamplesBlock([entry]);
+    expect(block).toContain('Titular desde bloque');
+    expect(block).toContain('Cuerpo desde bloque');
+    expect(block).toContain('CTA desde bloque');
+  });
 });
 
 describe('refineCommandPrompt', () => {

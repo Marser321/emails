@@ -1,9 +1,29 @@
 // Prompts compartidos entre motores (Gemini y Claude) con inyección de memoria de marca
-import { Brand, EmailHistoryEntry, TemplateType } from '@/lib/types';
+import { BlockConfig, Brand, EmailContent, EmailHistoryEntry, TemplateType } from '@/lib/types';
 
 function truncate(text: string, max: number): string {
   if (!text || text.length <= max) return text;
   return `${text.slice(0, max)}…`;
+}
+
+// Extrae el texto semántico de un email para los ejemplos few-shot. Tras el
+// refactor D el contenido vive en content.blocks[] (fuente de verdad); para el
+// historial viejo (formato legacy sin blocks) cae a los campos legacy.
+function exampleText(content: EmailContent) {
+  const blocks = content.blocks ?? [];
+  const find = <T extends BlockConfig['type']>(type: T) =>
+    blocks.find((b): b is Extract<BlockConfig, { type: T }> => b.type === type);
+  const text = find('text');
+  const bullets = find('bullets');
+  const cta = find('cta');
+  return {
+    label: text?.label || content.label,
+    headline: text?.headline || content.headline,
+    body: text?.body || content.body,
+    bullets: bullets?.bullets || content.bullets,
+    ctaText: cta?.ctaText || content.ctaText,
+    preCta: cta?.preCta || content.preCta,
+  };
 }
 
 // Bloque "Perfil de voz" — se inyecta cuando la marca tiene voice configurado
@@ -36,11 +56,11 @@ export function buildExamplesBlock(examples: EmailHistoryEntry[]): string {
       'Imita su ESTILO y tono, NO su contenido:',
     );
     approved.slice(0, 3).forEach((e, i) => {
-      const c = e.content;
+      const c = exampleText(e.content);
       const sample = {
         label: c.label,
         headline: c.headline,
-        body: truncate(c.body, 600),
+        body: truncate(c.body || '', 600),
         bullets: c.bullets?.filter(Boolean),
         ctaText: c.ctaText,
         preCta: c.preCta,
@@ -57,10 +77,10 @@ export function buildExamplesBlock(examples: EmailHistoryEntry[]): string {
       'NO repitas el estilo, tono ni las fórmulas de estos ejemplos:',
     );
     rejected.slice(0, 2).forEach((e, i) => {
-      const c = e.content;
+      const c = exampleText(e.content);
       const sample = {
         headline: c.headline,
-        body: truncate(c.body, 300),
+        body: truncate(c.body || '', 300),
         ctaText: c.ctaText,
       };
       parts.push(`### Rechazado ${i + 1}`);
