@@ -8,11 +8,12 @@ import AssetPicker from '@/components/AssetPicker';
 import CanvasEditor from '@/components/CanvasEditor';
 import VisualDesignHub from '@/components/VisualDesignHub';
 import ExportModal from '@/components/ExportModal';
+import EmailHistoryCard from '@/components/EmailHistoryCard';
 import { getAllBrands, updateBrand } from '@/lib/brands';
 import { collectLocalAssetUrls } from '@/lib/export';
 import { analyzeEmailHtml, listEmailIssues } from '@/lib/email-checks';
 import { renderEmail } from '@/lib/templates';
-import { AIEngine, Brand, Draft, EmailContent, LayoutVariant, TemplateType, TEMPLATES } from '@/lib/types';
+import { AIEngine, Brand, Draft, EmailContent, EmailHistoryEntry, LayoutVariant, TemplateType, TEMPLATES } from '@/lib/types';
 import { Palette } from 'lucide-react';
 import { applyPresetPreservingContent, getTemplatePreset, presetsForObjective } from '@/lib/template-presets';
 
@@ -108,6 +109,10 @@ function EditorContent() {
   // Advanced features states
   const [activeTab, setActiveTab] = useState<'editor' | 'canvas' | 'drafts'>('editor');
   const [savedDrafts, setSavedDrafts] = useState<Draft[]>([]);
+  // Biblioteca: emails generados de la marca seleccionada (del historial)
+  const [brandEmails, setBrandEmails] = useState<EmailHistoryEntry[]>([]);
+  const [brandEmailsLoading, setBrandEmailsLoading] = useState(false);
+  const [brandEmailsError, setBrandEmailsError] = useState<string | null>(null);
   const [newDraftName, setNewDraftName] = useState('');
   const [testEmail, setTestEmail] = useState('');
   const [sendingTest, setSendingTest] = useState(false);
@@ -165,6 +170,29 @@ function EditorContent() {
       .then(setSavedDrafts)
       .catch(e => console.error('Error loading drafts', e));
   }, []);
+
+  // Biblioteca: cargar el historial de la marca al abrir la pestaña o cambiar de marca
+  useEffect(() => {
+    if (!mounted || activeTab !== 'drafts' || !selectedBrandId) return;
+    setBrandEmailsLoading(true);
+    fetch(`/api/history?brandId=${encodeURIComponent(selectedBrandId)}&limit=50`)
+      .then(async res => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error || `Error ${res.status} al cargar el historial`);
+        }
+        return res.json();
+      })
+      .then((entries: EmailHistoryEntry[]) => {
+        setBrandEmails(entries);
+        setBrandEmailsError(null);
+      })
+      .catch((e: Error) => {
+        setBrandEmails([]);
+        setBrandEmailsError(e.message);
+      })
+      .finally(() => setBrandEmailsLoading(false));
+  }, [mounted, activeTab, selectedBrandId]);
 
   // Save history checkpoint
   const saveHistory = useCallback((newContent: EmailContent) => {
@@ -401,6 +429,7 @@ function EditorContent() {
         setContent(loaded);
         setHistory([JSON.parse(JSON.stringify(loaded))]);
         setHistoryIndex(0);
+        setActiveTab('editor');
         if (isDuplicate) {
           setLastHistory(null);
           showToast('📄 Duplicado — al generar o copiar se guardará como email nuevo');
@@ -2031,7 +2060,47 @@ function EditorContent() {
                     <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', borderBottom: '1px solid var(--border-subtle)', paddingBottom: 10, margin: 0 }}>
                       📁 Biblioteca & Envío de Prueba
                     </h3>
-                    
+
+                    {/* Emails generados de la marca (historial) */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <h4 style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, margin: 0 }}>
+                        📬 Emails de {selectedBrand?.name || 'la marca'} ({brandEmails.length})
+                      </h4>
+                      {brandEmailsLoading ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {[0, 1].map(i => (
+                            <div key={i} className="skeleton" style={{ height: 120, borderRadius: 'var(--radius-md)' }} />
+                          ))}
+                        </div>
+                      ) : brandEmailsError ? (
+                        <div className="empty-state" style={{ padding: '20px 10px' }}>
+                          <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', margin: '0 0 10px' }}>
+                            ⚠️ No se pudo cargar el historial: {brandEmailsError}
+                          </p>
+                        </div>
+                      ) : brandEmails.length === 0 ? (
+                        <div className="empty-state" style={{ padding: '20px 10px' }}>
+                          <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', margin: 0 }}>
+                            Esta marca todavía no tiene emails generados. Los que generes con IA aparecerán acá.
+                          </p>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {brandEmails.map(entry => (
+                            <EmailHistoryCard
+                              key={entry.id}
+                              entry={entry}
+                              brandName={selectedBrand?.name || 'Marca'}
+                              brand={selectedBrand || undefined}
+                              style={{ width: '100%' }}
+                              onToast={showToast}
+                              onRated={updated => setBrandEmails(prev => prev.map(e => (e.id === updated.id ? updated : e)))}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Send Test Email widget inside drafts for clean accessibility */}
                     <div className="glass-shell" style={{ padding: 4, marginBottom: 8 }}>
                       <div className="glass-core" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>

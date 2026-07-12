@@ -1,16 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { CSSProperties, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2, Check, Clipboard, Copy, FilePenLine, ThumbsDown, ThumbsUp } from 'lucide-react';
 import EmailThumbnail from '@/components/EmailThumbnail';
-import { EmailHistoryEntry } from '@/lib/types';
+import { renderEmail } from '@/lib/templates';
+import { Brand, EmailHistoryEntry } from '@/lib/types';
 
 interface EmailHistoryCardProps {
   entry: EmailHistoryEntry;
   brandName: string;
   onRated: (entry: EmailHistoryEntry) => void;
   onToast: (message: string, type?: 'success' | 'error') => void;
+  /** Marca completa: permite copiar HTML aunque el email no tenga snapshot (se renderiza al vuelo). */
+  brand?: Brand;
+  /** Estilos extra para el contenedor (p. ej. width: '100%' en listas verticales). */
+  style?: CSSProperties;
 }
 
 function relativeDate(iso: string): string {
@@ -25,17 +30,20 @@ function relativeDate(iso: string): string {
   return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 }
 
-export default function EmailHistoryCard({ entry, brandName, onRated, onToast }: EmailHistoryCardProps) {
+export default function EmailHistoryCard({ entry, brandName, onRated, onToast, brand, style }: EmailHistoryCardProps) {
   const router = useRouter();
   const [justCopied, setJustCopied] = useState(false);
 
   const handleCopy = async () => {
-    if (!entry.htmlSnapshot) {
+    // Sin snapshot (nunca se copió desde el editor) pero con la marca a mano:
+    // renderizamos el contenido estructurado al vuelo para poder copiar igual.
+    const html = entry.htmlSnapshot || (brand && entry.content ? renderEmail(brand, entry.content) : '');
+    if (!html) {
       onToast('Este email no tiene HTML guardado todavía — ábrelo en el editor', 'error');
       return;
     }
     try {
-      await navigator.clipboard.writeText(entry.htmlSnapshot);
+      await navigator.clipboard.writeText(html);
       onToast('HTML copiado al portapapeles');
       setJustCopied(true);
       setTimeout(() => setJustCopied(false), 1800);
@@ -60,7 +68,7 @@ export default function EmailHistoryCard({ entry, brandName, onRated, onToast }:
   };
 
   return (
-    <div className="glass-shell" style={{ padding: 4, width: 300, flexShrink: 0 }}>
+    <div className="glass-shell" style={{ padding: 4, width: 300, flexShrink: 0, ...style }}>
       <div className="glass-core" style={{ padding: 12, display: 'flex', gap: 12 }}>
         <EmailThumbnail html={entry.htmlSnapshot} width={90} height={118} />
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>

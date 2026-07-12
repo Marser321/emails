@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [history, setHistory] = useState<EmailHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
   const [toast, setToast] = useState<string | null>(null);
@@ -38,9 +39,23 @@ export default function Dashboard() {
     if (query) params.set('q', query);
     if (brandId) params.set('brandId', brandId);
     fetch(`/api/history?${params}`)
-      .then(res => (res.ok ? res.json() : []))
-      .then(setHistory)
-      .catch(() => setHistory([]))
+      .then(async res => {
+        if (!res.ok) {
+          // Un 500/401 acá NO es "no hay emails": mostrarlo como error para que
+          // un problema de sesión o permisos no se disfrace de historial vacío.
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error || `Error ${res.status} al cargar el historial`);
+        }
+        return res.json();
+      })
+      .then(entries => {
+        setHistory(entries);
+        setHistoryError(null);
+      })
+      .catch((e: Error) => {
+        setHistory([]);
+        setHistoryError(e.message);
+      })
       .finally(() => setHistoryLoading(false));
   };
 
@@ -146,6 +161,16 @@ export default function Dashboard() {
                     <div key={i} className="skeleton" style={{ width: 'min(300px, 100%)', height: 140, borderRadius: 'var(--radius-md)', flexShrink: 0 }} />
                   ))}
                 </div>
+              ) : historyError ? (
+                <div className="empty-state" style={{ padding: '26px 10px' }}>
+                  <div className="empty-icon">⚠️</div>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', margin: '6px 0 12px' }}>
+                    No se pudo cargar el historial: {historyError}
+                  </p>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => loadHistory(search, brandFilter)}>
+                    Reintentar
+                  </button>
+                </div>
               ) : history.length === 0 ? (
                 <div className="empty-state" style={{ padding: '26px 10px' }}>
                   <div className="empty-icon"><Inbox size={34} /></div>
@@ -163,6 +188,7 @@ export default function Dashboard() {
                       key={entry.id}
                       entry={entry}
                       brandName={brandName(entry.brandId)}
+                      brand={brands.find(b => b.id === entry.brandId)}
                       onToast={showToast}
                       onRated={updated => setHistory(prev => prev.map(e => (e.id === updated.id ? updated : e)))}
                     />
