@@ -104,3 +104,79 @@ describe('image block style fields', () => {
     expect(html).toContain('border-radius:24px');
   });
 });
+
+describe('configurable canvas divider', () => {
+  it('renders a styled line split around an ornament', () => {
+    const html = renderEmail(brands[0], {
+      ...contentFor('divider'),
+      blocks: [{ id: 'divider-1', type: 'divider', color: '#ff5500', thickness: 4, lineStyle: 'dashed', ornament: '✦' }],
+    });
+
+    expect(html).toContain('border-top:4px dashed #ff5500');
+    expect(html.match(/width="50%"/g)).toHaveLength(2);
+    expect(html).toContain('>✦</td>');
+  });
+});
+
+describe('canvas badge block', () => {
+  it('renders an Outlook-safe pill using the email accent by default', () => {
+    const html = renderEmail(brands[0], {
+      ...contentFor('badge'), accentColor: '#aa1122',
+      blocks: [{ id: 'badge-1', type: 'badge', text: 'hot', emoji: '🔥', align: 'right' }],
+    });
+
+    expect(html).toContain('align="right"');
+    expect(html).toContain('bgcolor="#aa1122"');
+    expect(html).toContain('padding:6px 16px;border-radius:100px');
+    expect(html).toContain('🔥 hot</span>');
+  });
+});
+
+describe('canvas callout block', () => {
+  it('renders a cell-based accent bar and preserves body line breaks', () => {
+    const html = renderEmail(brands[0], {
+      ...contentFor('callout'), accentColor: '#aa1122',
+      blocks: [{ id: 'callout-1', type: 'callout', emoji: '💡', title: 'Garantía', body: 'Primera línea\nSegunda línea' }],
+    });
+
+    expect(html).toContain('<td width="4" bgcolor="#aa1122"');
+    expect(html).toContain('bgcolor="#f2dbde"');
+    expect(html).toContain('Primera línea<br>Segunda línea');
+    expect(html).not.toContain('border-left');
+  });
+});
+
+describe('custom canvas bullet markers', () => {
+  it('prefers per-bullet markers and only colors non-emoji characters', () => {
+    const html = renderEmail(brands[0], {
+      ...contentFor('markers'), accentColor: '#aa1122',
+      blocks: [{
+        id: 'bullets-1', type: 'bullets', bullets: ['Uno', 'Dos', 'Tres'], marker: '›',
+        perBulletMarker: ['', '✅', '✂️'],
+      }],
+    });
+
+    expect(html).toContain('<span style="color:#aa1122;font-weight:800;">›</span>');
+    expect(html).toContain('<span style="font-weight:800;">✅</span>');
+    expect(html).toContain('<span style="font-weight:800;">✂️</span>');
+  });
+});
+
+describe('configurable canvas CTA', () => {
+  it('applies visual overrides to both VML and the non-MSO link', () => {
+    const html = renderEmail(brands[0], {
+      ...contentFor('cta-visual'), emailWidth: 620,
+      blocks: [{
+        id: 'cta-1', type: 'cta', ctaText: 'Comprar', ctaUrl: 'https://example.com/comprar',
+        ctaBgColor: '#112233', ctaTextColor: '#ffeeaa', ctaRadius: 20,
+        ctaFullWidth: true, ctaSize: 'lg', style: { paddingLeft: 40, paddingRight: 40 },
+      }],
+    });
+
+    expect(html).toContain('style="height:58px;v-text-anchor:middle;width:540px;" arcsize="34%" fillcolor="#112233"');
+    expect(html).toContain('color:#ffeeaa;font-family:Arial,sans-serif;font-size:19px');
+    expect(html).toContain('display:block;text-align:center;width:100%;box-sizing:border-box;');
+    expect(html).toContain('background:#112233;color:#ffeeaa;');
+    expect(html).toContain('padding:18px 42px;border-radius:20px;');
+  });
+});

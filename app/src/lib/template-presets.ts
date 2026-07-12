@@ -1,4 +1,4 @@
-import type { BlockConfig, EmailContent, TemplatePreset, TemplatePresetId, TemplateType } from './types';
+import type { BlockConfig, CanvasBlockType, EmailContent, TemplatePreset, TemplatePresetId, TemplateType } from './types';
 
 type ObjectiveCopy = {
   label: string;
@@ -158,10 +158,25 @@ export function defaultPresetForObjective(objective: TemplateType): TemplatePres
 
 export function applyPresetPreservingContent(preset: TemplatePreset, current: EmailContent): EmailContent {
   const next = structuredClone(preset.defaultContent);
+  // D3: el contenido del usuario vive en content.blocks[] (fuente de verdad); se
+  // extrae de ahí para preservarlo al cambiar de preset. Fallback a los campos
+  // legacy solo por si llega un email viejo aún no migrado en memoria.
+  const cur = current.blocks || [];
+  const findBlock = <T extends CanvasBlockType>(type: T) => cur.find(block => block.type === type) as Extract<BlockConfig, { type: T }> | undefined;
+  const textBlock = findBlock('text'); const bulletsBlock = findBlock('bullets');
+  const ctaBlock = findBlock('cta'); const infoBlock = findBlock('infobox'); const footerBlock = findBlock('footer');
   const semantic = {
-    label: current.label, headline: current.headline, body: current.body, bulletsTitle: current.bulletsTitle,
-    bullets: current.bullets, ctaText: current.ctaText, ctaUrl: current.ctaUrl, eventDate: current.eventDate,
-    eventTime: current.eventTime, preCta: current.preCta, footerNote: current.footerNote,
+    label: textBlock?.label ?? current.label ?? '',
+    headline: textBlock?.headline ?? current.headline ?? '',
+    body: textBlock?.body ?? current.body ?? '',
+    bulletsTitle: bulletsBlock?.bulletsTitle ?? current.bulletsTitle ?? '',
+    bullets: bulletsBlock?.bullets ?? current.bullets ?? [],
+    ctaText: ctaBlock?.ctaText ?? current.ctaText ?? '',
+    ctaUrl: ctaBlock?.ctaUrl ?? current.ctaUrl ?? '',
+    eventDate: infoBlock?.eventDate ?? current.eventDate ?? '',
+    eventTime: infoBlock?.eventTime ?? current.eventTime ?? '',
+    preCta: ctaBlock?.preCta ?? current.preCta ?? '',
+    footerNote: footerBlock?.footerNote ?? current.footerNote ?? '',
   };
   const blocks = (next.blocks || []).map(block => {
     if (block.type === 'text') return { ...block, label: semantic.label || block.label, headline: semantic.headline || block.headline, body: semantic.body || block.body };
@@ -171,5 +186,9 @@ export function applyPresetPreservingContent(preset: TemplatePreset, current: Em
     if (block.type === 'footer') return { ...block, footerNote: semantic.footerNote || block.footerNote };
     return block;
   });
-  return { ...next, ...semantic, subject: current.subject || next.subject, preheader: current.preheader || next.preheader, blocks };
+  // D3: no propagar los campos legacy de contenido; blocks[] es la fuente de verdad.
+  const result: EmailContent = { ...next, subject: current.subject || next.subject, preheader: current.preheader || next.preheader, blocks };
+  delete result.label; delete result.headline; delete result.body; delete result.bulletsTitle; delete result.bullets;
+  delete result.ctaText; delete result.ctaUrl; delete result.eventDate; delete result.eventTime; delete result.preCta; delete result.footerNote;
+  return result;
 }

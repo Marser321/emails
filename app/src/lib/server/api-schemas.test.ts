@@ -23,4 +23,62 @@ describe('API schemas', () => {
     expect(settingsPatchSchema.safeParse({ defaultEngine: 'gemini' }).success).toBe(true);
     expect(settingsPatchSchema.safeParse({ geminiApiKey: 'secret' }).success).toBe(false);
   });
+
+  it('validates configurable divider fields', () => {
+    const valid = {
+      ...structuredClone(document),
+      blocks: [document.blocks[0], { id: 'divider', type: 'divider', color: '#ff5500', thickness: 4, lineStyle: 'dashed', ornament: '✦' }, ...document.blocks.slice(1)],
+    };
+    expect(emailDocumentSchema.safeParse(valid).success).toBe(true);
+
+    const invalid = { ...valid, blocks: valid.blocks.map((block, index) => index === 1 ? { ...block, thickness: 9 } : block) };
+    expect(emailDocumentSchema.safeParse(invalid).success).toBe(false);
+  });
+
+  it('validates badge fields and requires text', () => {
+    const valid = {
+      ...structuredClone(document),
+      blocks: [document.blocks[0], { id: 'badge', type: 'badge', text: 'NUEVO', emoji: '✨', bgColor: '#aa1122', textColor: '#ffffff', align: 'center' }, ...document.blocks.slice(1)],
+    };
+    expect(emailDocumentSchema.safeParse(valid).success).toBe(true);
+
+    const invalid = { ...valid, blocks: valid.blocks.map((block, index) => index === 1 ? { ...block, text: '' } : block) };
+    expect(emailDocumentSchema.safeParse(invalid).success).toBe(false);
+  });
+
+  it('validates callout fields and full hex colors', () => {
+    const valid = {
+      ...structuredClone(document),
+      blocks: [document.blocks[0], { id: 'callout', type: 'callout', emoji: '⚠️', title: 'Aviso', body: 'Contenido', bgColor: '#f2dbde', accentColor: '#aa1122' }, ...document.blocks.slice(1)],
+    };
+    expect(emailDocumentSchema.safeParse(valid).success).toBe(true);
+
+    const invalid = { ...valid, blocks: valid.blocks.map((block, index) => index === 1 ? { ...block, accentColor: '#bad' } : block) };
+    expect(emailDocumentSchema.safeParse(invalid).success).toBe(false);
+  });
+
+  it('validates general and per-bullet markers', () => {
+    const valid = {
+      ...structuredClone(document),
+      blocks: [document.blocks[0], { id: 'bullets', type: 'bullets', bullets: ['Uno', 'Dos'], marker: '•', perBulletMarker: ['✅', '✅'] }, ...document.blocks.slice(1)],
+    };
+    expect(emailDocumentSchema.safeParse(valid).success).toBe(true);
+
+    const invalid = { ...valid, blocks: valid.blocks.map((block, index) => index === 1 ? { ...block, marker: 'x'.repeat(33) } : block) };
+    expect(emailDocumentSchema.safeParse(invalid).success).toBe(false);
+  });
+
+  it('validates configurable CTA appearance', () => {
+    const valid = {
+      ...structuredClone(document),
+      blocks: [document.blocks[0], {
+        id: 'cta', type: 'cta', ctaText: 'Comprar', ctaUrl: 'https://example.com',
+        ctaBgColor: '#112233', ctaTextColor: '#ffeeaa', ctaRadius: 20, ctaFullWidth: true, ctaSize: 'lg',
+      }, ...document.blocks.slice(1)],
+    };
+    expect(emailDocumentSchema.safeParse(valid).success).toBe(true);
+
+    const invalid = { ...valid, blocks: valid.blocks.map((block, index) => index === 1 ? { ...block, ctaRadius: 29 } : block) };
+    expect(emailDocumentSchema.safeParse(invalid).success).toBe(false);
+  });
 });

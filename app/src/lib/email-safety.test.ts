@@ -59,4 +59,76 @@ describe('email safety', () => {
     const galleryBlock = safe.blocks?.[1] as { borderRadius?: number };
     expect(galleryBlock.borderRadius).toBeUndefined(); // ausente → sigue ausente
   });
+
+  it('sanitizes configurable divider fields', () => {
+    const safe = sanitizeContentForEmail({
+      ...content,
+      blocks: [{
+        id: 'divider', type: 'divider', color: 'red', thickness: 99,
+        lineStyle: 'double' as unknown as 'solid', ornament: '<b>✦</b>',
+      }],
+    });
+    const divider = safe.blocks?.[0];
+
+    expect(divider).toMatchObject({
+      type: 'divider', color: '#e5eaf0', thickness: 8, lineStyle: 'solid', ornament: '&lt;b&gt;✦&lt;/b&gt;',
+    });
+  });
+
+  it('sanitizes badge copy, colors and alignment', () => {
+    const safe = sanitizeContentForEmail({
+      ...content, accentColor: '#aa1122',
+      blocks: [{
+        id: 'badge', type: 'badge', text: '<b>hot</b>', emoji: '<i>🔥</i>',
+        bgColor: 'red', textColor: '#fff', align: 'wide' as unknown as 'center',
+      }],
+    });
+
+    expect(safe.blocks?.[0]).toMatchObject({
+      type: 'badge', text: '&lt;b&gt;hot&lt;/b&gt;', emoji: '&lt;i&gt;🔥&lt;/i&gt;',
+      bgColor: '#aa1122', textColor: '#ffffff', align: 'center',
+    });
+  });
+
+  it('sanitizes callout copy and derives safe default colors', () => {
+    const safe = sanitizeContentForEmail({
+      ...content, accentColor: '#aa1122',
+      blocks: [{
+        id: 'callout', type: 'callout', emoji: '<i>💡</i>', title: '<b>Aviso</b>',
+        body: '<script>x</script>\nSegunda línea', bgColor: 'white', accentColor: '#bad',
+      }],
+    });
+
+    expect(safe.blocks?.[0]).toMatchObject({
+      type: 'callout', emoji: '&lt;i&gt;💡&lt;/i&gt;', title: '&lt;b&gt;Aviso&lt;/b&gt;',
+      body: '&lt;script&gt;x&lt;/script&gt;<br>Segunda línea', bgColor: '#f2dbde', accentColor: '#aa1122',
+    });
+  });
+
+  it('escapes general and per-bullet markers', () => {
+    const safe = sanitizeContentForEmail({
+      ...content,
+      blocks: [{ id: 'bullets', type: 'bullets', bullets: ['Uno'], marker: '<b>', perBulletMarker: ['<i>', '✅'] }],
+    });
+
+    expect(safe.blocks?.[0]).toMatchObject({
+      type: 'bullets', marker: '&lt;b&gt;', perBulletMarker: ['&lt;i&gt;', '✅'],
+    });
+  });
+
+  it('sanitizes configurable CTA appearance', () => {
+    const safe = sanitizeContentForEmail({
+      ...content, accentColor: '#aa1122',
+      blocks: [{
+        id: 'cta', type: 'cta', ctaText: 'Comprar', ctaUrl: 'https://example.com',
+        ctaBgColor: 'red', ctaTextColor: '#fff', ctaRadius: 99,
+        ctaFullWidth: 'yes' as unknown as boolean, ctaSize: 'xl' as unknown as 'md',
+      }],
+    });
+
+    expect(safe.blocks?.[0]).toMatchObject({
+      type: 'cta', ctaBgColor: '#aa1122', ctaTextColor: '#ffffff', ctaRadius: 28,
+      ctaFullWidth: false, ctaSize: 'md',
+    });
+  });
 });

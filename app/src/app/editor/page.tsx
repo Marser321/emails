@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import AssetPicker from '@/components/AssetPicker';
@@ -9,11 +9,17 @@ import CanvasEditor from '@/components/CanvasEditor';
 import VisualDesignHub from '@/components/VisualDesignHub';
 import ExportModal from '@/components/ExportModal';
 import EmailHistoryCard from '@/components/EmailHistoryCard';
+import EmojiPicker, { insertEmojiAtFocusedField } from '@/components/EmojiPicker';
 import { getAllBrands, updateBrand } from '@/lib/brands';
 import { collectLocalAssetUrls } from '@/lib/export';
 import { analyzeEmailHtml, listEmailIssues } from '@/lib/email-checks';
 import { renderEmail } from '@/lib/templates';
-import { AIEngine, Brand, Draft, EmailContent, EmailHistoryEntry, LayoutVariant, TemplateType, TEMPLATES } from '@/lib/types';
+import { ensureContentBlocks, insertBlockInOrder, moveBlock as moveBlockInArray, documentToContent, prepareContentForSave } from '@/lib/email-document';
+import {
+  AIEngine, Brand, Draft, EmailContent, EmailHistoryEntry, LayoutVariant, TemplateType, TEMPLATES,
+  BlockConfig, CanvasBlockType, createDefaultBlock, CANVAS_BLOCK_CATALOG,
+  BulletsBlockConfig,
+} from '@/lib/types';
 import { Palette } from 'lucide-react';
 import { applyPresetPreservingContent, getTemplatePreset, presetsForObjective } from '@/lib/template-presets';
 
@@ -37,18 +43,10 @@ const ENGINE_LABELS: Record<AIEngine, string> = {
   claude: '🧠 Claude',
 };
 
+// D3: un email nuevo solo trae campos top-level (tema/layout); el contenido vive
+// en content.blocks[] (ensureContentBlocks lo puebla con header+footer). Los
+// campos legacy de contenido ya no se inicializan aquí.
 const DEFAULT_CONTENT: EmailContent = {
-  label: '',
-  headline: '',
-  body: '',
-  bulletsTitle: '',
-  bullets: ['', '', ''],
-  ctaText: '',
-  ctaUrl: '',
-  eventDate: '',
-  eventTime: '',
-  preCta: '',
-  footerNote: '',
   emailBgColor: '#eef2f6',
   bodyBgColor: '#ffffff',
   textureUrl: '',
@@ -65,6 +63,39 @@ const TEXTURE_PRESETS = [
   { name: 'Gradiente Suave', url: 'https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=200&auto=format&fit=crop' },
 ];
 
+// ====== D2: mapeo campo de "Contenido" → bloque de content.blocks[] ======
+// La pestaña "Contenido" edita SIEMPRE el primer bloque de cada type. Los
+// bloques extra del mismo type que se agreguen desde Canvas conservan sus
+// valores y se editan desde Canvas.
+type ContentField =
+  | 'label' | 'headline' | 'body' | 'bulletsTitle' | 'eventDate' | 'eventTime'
+  | 'preCta' | 'ctaText' | 'ctaUrl' | 'secondaryCtaText' | 'secondaryCtaUrl' | 'footerNote';
+
+const FIELD_TO_BLOCK: Record<ContentField, { type: CanvasBlockType; key: string }> = {
+  label:            { type: 'text',    key: 'label' },
+  headline:         { type: 'text',    key: 'headline' },
+  body:             { type: 'text',    key: 'body' },
+  bulletsTitle:     { type: 'bullets', key: 'bulletsTitle' },
+  eventDate:        { type: 'infobox', key: 'eventDate' },
+  eventTime:        { type: 'infobox', key: 'eventTime' },
+  preCta:           { type: 'cta',     key: 'preCta' },
+  ctaText:          { type: 'cta',     key: 'ctaText' },
+  ctaUrl:           { type: 'cta',     key: 'ctaUrl' },
+  secondaryCtaText: { type: 'cta',     key: 'secondaryCtaText' },
+  secondaryCtaUrl:  { type: 'cta',     key: 'secondaryCtaUrl' },
+  footerNote:       { type: 'footer',  key: 'footerNote' },
+};
+
+// Getter tipado del primer bloque de un type dentro de un array de bloques.
+function findBlock<T extends CanvasBlockType>(blocks: BlockConfig[], type: T): Extract<BlockConfig, { type: T }> | undefined {
+  return blocks.find(block => block.type === type) as Extract<BlockConfig, { type: T }> | undefined;
+}
+
+// Etiquetas legibles por type de bloque (para la lista de reordenamiento).
+const CANVAS_BLOCK_LABELS: Record<string, string> = Object.fromEntries(
+  CANVAS_BLOCK_CATALOG.map(entry => [entry.type, entry.label]),
+);
+
 function EditorContent() {
   const searchParams = useSearchParams();
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -73,7 +104,9 @@ function EditorContent() {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [selectedBrandId, setSelectedBrandId] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateType>('masterclass');
-  const [content, setContent] = useState<EmailContent>({ ...DEFAULT_CONTENT });
+  // D2: content.blocks[] es la fuente única de verdad, también para un email
+  // nuevo (arranca con header+footer derivados de legacyContentToBlocks).
+  const [content, setContent] = useState<EmailContent>(() => ensureContentBlocks({ ...DEFAULT_CONTENT }));
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile' | 'split'>('desktop');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -207,9 +240,9 @@ function EditorContent() {
     });
   }, [historyIndex]);
 
-  // Seed history on mount or template reset
+  // Seed history on mount o al resetear plantilla (baseline de undo/redo).
   useEffect(() => {
-    if (mounted && content.label !== '' && history.length === 0) {
+    if (mounted && !!content.blocks?.length && history.length === 0) {
       setHistory([JSON.parse(JSON.stringify(content))]);
       setHistoryIndex(0);
     }
@@ -375,8 +408,12 @@ function EditorContent() {
         if (decoded.brandId) setSelectedBrandId(decoded.brandId);
         if (decoded.template) setSelectedTemplate(decoded.template);
         if (decoded.content) {
-          setContent(decoded.content);
-          setHistory([JSON.parse(JSON.stringify(decoded.content))]);
+          // D1: el borrador compartido puede venir del formato legacy (sin
+          // blocks); lo migramos al cargar para que Canvas y el guardado
+          // vean el mismo contenido que el preview.
+          const loadedShared = ensureContentBlocks(decoded.content);
+          setContent(loadedShared);
+          setHistory([JSON.parse(JSON.stringify(loadedShared))]);
           setHistoryIndex(0);
         }
         showToast('🔗 Borrador compartido cargado con éxito');
@@ -425,7 +462,10 @@ function EditorContent() {
         if (entry.templateType && TEMPLATES.find(t => t.type === entry.templateType)) {
           setSelectedTemplate(entry.templateType);
         }
-        const loaded: EmailContent = { ...DEFAULT_CONTENT, ...entry.content };
+        // D1: migrar emails viejos del historial (sin blocks) al abrirlos,
+        // sin cambiar su apariencia — legacyContentToBlocks reproduce
+        // exactamente lo que renderEmail() ya deriva al renderizar.
+        const loaded: EmailContent = ensureContentBlocks({ ...DEFAULT_CONTENT, ...entry.content });
         setContent(loaded);
         setHistory([JSON.parse(JSON.stringify(loaded))]);
         setHistoryIndex(0);
@@ -454,16 +494,32 @@ function EditorContent() {
   const handleChooseTemplate = useCallback((type: TemplateType) => {
     setSelectedTemplate(type);
     const tmpl = TEMPLATES.find(t => t.type === type);
-    if (tmpl?.defaultContent) {
-      setContent(prev => ({
-        ...prev,
-        label: tmpl.defaultContent.label || prev.label,
-        bulletsTitle: tmpl.defaultContent.bulletsTitle || prev.bulletsTitle,
-        ctaText: tmpl.defaultContent.ctaText || prev.ctaText,
-        preCta: tmpl.defaultContent.preCta || prev.preCta,
-        footerNote: tmpl.defaultContent.footerNote || prev.footerNote,
-      }));
-    }
+    if (!tmpl?.defaultContent) return;
+    const defaults = tmpl.defaultContent;
+    // D2: los placeholders de la plantilla se aplican al bloque correspondiente
+    // dentro de content.blocks[] (creándolo si falta), no a campos legacy, y solo
+    // si el campo del bloque está vacío (no pisa contenido ya cargado/editado).
+    setContent(prev => {
+      const base = ensureContentBlocks(prev);
+      let blocks = base.blocks || [];
+      const fill = (blockType: CanvasBlockType, key: string, value?: string) => {
+        if (!value) return;
+        const idx = blocks.findIndex(b => b.type === blockType);
+        if (idx >= 0) {
+          const current = (blocks[idx] as unknown as Record<string, unknown>)[key];
+          if (typeof current === 'string' && current.trim()) return; // ya tiene valor
+          blocks = blocks.map((b, i) => i === idx ? ({ ...b, [key]: value } as BlockConfig) : b);
+        } else {
+          blocks = insertBlockInOrder(blocks, { ...createDefaultBlock(blockType), [key]: value } as BlockConfig);
+        }
+      };
+      fill('text', 'label', defaults.label);
+      fill('bullets', 'bulletsTitle', defaults.bulletsTitle);
+      fill('cta', 'ctaText', defaults.ctaText);
+      fill('cta', 'preCta', defaults.preCta);
+      fill('footer', 'footerNote', defaults.footerNote);
+      return { ...base, blocks };
+    });
   }, []);
 
   // Generate HTML
@@ -602,37 +658,158 @@ function EditorContent() {
     syncHistorySnapshot();
   };
 
-  const updateContent = (field: keyof EmailContent, value: string | string[]) => {
+  // Campos top-level (asunto, preheader, colores, texturas, layout, showDividers).
+  // NO son campos de bloque: viven directo en EmailContent.
+  const updateContent = (field: keyof EmailContent, value: string | string[] | boolean) => {
     setContent(prev => ({ ...prev, [field]: value }));
   };
 
+  // ====== D2: la pestaña "Contenido" opera sobre content.blocks[] ======
+  // Vista efectiva de los bloques (D1 garantiza que existan; el fallback cubre
+  // cualquier borde). Los getters del formulario leen de acá; así, al editar en
+  // Canvas, "Contenido" refleja el mismo estado sin pisarse.
+  const effectiveBlocks = useMemo(() => ensureContentBlocks(content).blocks || [], [content]);
+
+  const readBlockField = (field: ContentField): string => {
+    const map = FIELD_TO_BLOCK[field];
+    const block = effectiveBlocks.find(b => b.type === map.type) as Record<string, unknown> | undefined;
+    const value = block?.[map.key];
+    return typeof value === 'string' ? value : '';
+  };
+
+  // Escribe un campo de "Contenido" en su bloque; si el bloque no existe todavía
+  // (email nuevo), lo crea en orden canónico con los defaults de Canvas.
+  const writeBlockField = useCallback((field: ContentField, value: string, commit = false) => {
+    const map = FIELD_TO_BLOCK[field];
+    setContent(prev => {
+      const base = ensureContentBlocks(prev);
+      const blocks = base.blocks || [];
+      const idx = blocks.findIndex(b => b.type === map.type);
+      let nextBlocks: BlockConfig[];
+      if (idx >= 0) {
+        nextBlocks = blocks.map((b, i) => i === idx ? ({ ...b, [map.key]: value } as BlockConfig) : b);
+      } else {
+        const created = { ...createDefaultBlock(map.type), [map.key]: value } as BlockConfig;
+        nextBlocks = insertBlockInOrder(blocks, created);
+      }
+      const next = { ...base, blocks: nextBlocks };
+      if (commit) saveHistory(next);
+      return next;
+    });
+  }, [saveHistory]);
+
+  // Actualiza el primer bloque de un type (sin crearlo). Para hero/imageText/
+  // gallery/quote, cuyo checkbox ya garantizó la existencia del bloque.
+  const patchFirstBlock = useCallback((type: CanvasBlockType, patch: Record<string, unknown>, commit = false) => {
+    setContent(prev => {
+      const base = ensureContentBlocks(prev);
+      const blocks = base.blocks || [];
+      const idx = blocks.findIndex(b => b.type === type);
+      if (idx < 0) return prev;
+      const nextBlocks = blocks.map((b, i) => i === idx ? ({ ...b, ...patch } as BlockConfig) : b);
+      const next = { ...base, blocks: nextBlocks };
+      if (commit) saveHistory(next);
+      return next;
+    });
+  }, [saveHistory]);
+
+  // Agrega/quita el primer bloque de un type (toggles de estructura).
+  const toggleBlock = useCallback((type: CanvasBlockType, on: boolean, seed?: Record<string, unknown>) => {
+    setContent(prev => {
+      const base = ensureContentBlocks(prev);
+      const blocks = base.blocks || [];
+      const idx = blocks.findIndex(b => b.type === type);
+      let nextBlocks: BlockConfig[];
+      if (on && idx < 0) {
+        nextBlocks = insertBlockInOrder(blocks, { ...createDefaultBlock(type), ...seed } as BlockConfig);
+      } else if (!on && idx >= 0) {
+        nextBlocks = blocks.filter((_, i) => i !== idx);
+      } else {
+        return prev;
+      }
+      const next = { ...base, blocks: nextBlocks };
+      saveHistory(next);
+      return next;
+    });
+  }, [saveHistory]);
+
+  // Reordenar bloques desde "Contenido" (misma lógica pura que usa Canvas).
+  const moveContentBlock = useCallback((from: number, to: number) => {
+    setContent(prev => {
+      const base = ensureContentBlocks(prev);
+      const nextBlocks = moveBlockInArray(base.blocks || [], from, to);
+      if (nextBlocks === base.blocks) return prev;
+      const next = { ...base, blocks: nextBlocks };
+      saveHistory(next);
+      return next;
+    });
+  }, [saveHistory]);
+
+  // Bullets: operan sobre el bloque 'bullets' (fallback a legacy en email nuevo
+  // sin bloque para conservar los 3 inputs vacíos por defecto).
+  const bulletsForForm = findBlock(effectiveBlocks, 'bullets')?.bullets ?? content.bullets ?? [];
+
+  // Bloques estructurales opcionales (imagen/testimonio) leídos desde blocks[].
+  const heroBlock = findBlock(effectiveBlocks, 'hero');
+  const imageTextBlock = findBlock(effectiveBlocks, 'image-text');
+  const galleryBlock = findBlock(effectiveBlocks, 'gallery');
+  const quoteBlock = findBlock(effectiveBlocks, 'quote');
+
   const updateBullet = (index: number, value: string) => {
-    const newBullets = [...content.bullets];
-    newBullets[index] = value;
-    setContent(prev => ({ ...prev, bullets: newBullets }));
+    setContent(prev => {
+      const base = ensureContentBlocks(prev);
+      const blocks = base.blocks || [];
+      const idx = blocks.findIndex(b => b.type === 'bullets');
+      let nextBlocks: BlockConfig[];
+      if (idx >= 0) {
+        const bullets = [...(blocks[idx] as BulletsBlockConfig).bullets];
+        while (bullets.length <= index) bullets.push('');
+        bullets[index] = value;
+        nextBlocks = blocks.map((b, i) => i === idx ? ({ ...b, bullets } as BlockConfig) : b);
+      } else {
+        const seed = [...(base.bullets ?? [])];
+        while (seed.length <= index) seed.push('');
+        seed[index] = value;
+        nextBlocks = insertBlockInOrder(blocks, { ...createDefaultBlock('bullets'), bullets: seed } as BlockConfig);
+      }
+      return { ...base, blocks: nextBlocks };
+    });
   };
 
   const addBullet = () => {
     setContent(prev => {
-      const next = { ...prev, bullets: [...prev.bullets, ''] };
+      const base = ensureContentBlocks(prev);
+      const blocks = base.blocks || [];
+      const idx = blocks.findIndex(b => b.type === 'bullets');
+      let nextBlocks: BlockConfig[];
+      if (idx >= 0) {
+        const bullets = [...(blocks[idx] as BulletsBlockConfig).bullets, ''];
+        nextBlocks = blocks.map((b, i) => i === idx ? ({ ...b, bullets } as BlockConfig) : b);
+      } else {
+        nextBlocks = insertBlockInOrder(blocks, { ...createDefaultBlock('bullets'), bullets: [...(base.bullets ?? []), ''] } as BlockConfig);
+      }
+      const next = { ...base, blocks: nextBlocks };
       saveHistory(next);
       return next;
     });
   };
 
   const removeBullet = (index: number) => {
-    if (content.bullets.length <= 1) return;
+    if (bulletsForForm.length <= 1) return;
     setContent(prev => {
-      const next = {
-        ...prev,
-        bullets: prev.bullets.filter((_, i) => i !== index),
-      };
+      const base = ensureContentBlocks(prev);
+      const blocks = base.blocks || [];
+      const idx = blocks.findIndex(b => b.type === 'bullets');
+      if (idx < 0) return prev;
+      const bullets = (blocks[idx] as BulletsBlockConfig).bullets.filter((_, i) => i !== index);
+      const nextBlocks = blocks.map((b, i) => i === idx ? ({ ...b, bullets } as BlockConfig) : b);
+      const next = { ...base, blocks: nextBlocks };
       saveHistory(next);
       return next;
     });
   };
 
-  // ====== Bloques & Layout ======
+  // ====== Bloques & Layout (campos top-level legacy: layout / showDividers) ======
   const setBlockValue = (patch: Partial<EmailContent>) => {
     setContent(prev => {
       const next = { ...prev, ...patch };
@@ -655,14 +832,15 @@ function EditorContent() {
   const handleAssetSelected = (url: string) => {
     if (!assetPickerTarget) return;
     if (assetPickerTarget === 'hero') {
-      setBlockValue({ hero: { fullBleed: true, ...content.hero, imageUrl: url } });
+      patchFirstBlock('hero', { imageUrl: url }, true);
     } else if (assetPickerTarget === 'imageText') {
-      setBlockValue({ imageText: { text: '', imagePosition: 'left', ...content.imageText, imageUrl: url } });
+      patchFirstBlock('image-text', { imageUrl: url }, true);
     } else if (assetPickerTarget.startsWith('gallery-')) {
       const index = parseInt(assetPickerTarget.split('-')[1], 10);
-      const images = [...(content.gallery?.images || [])];
+      const images = [...(findBlock(effectiveBlocks, 'gallery')?.images || [])];
+      while (images.length <= index) images.push({ url: '' });
       images[index] = { ...images[index], url };
-      setBlockValue({ gallery: { columns: 2, ...content.gallery, images } });
+      patchFirstBlock('gallery', { images }, true);
     }
     setAssetPickerTarget(null);
   };
@@ -721,8 +899,8 @@ function EditorContent() {
         body: JSON.stringify({
           brandId: lastHistory.brandId,
           htmlSnapshot: htmlOutput,
-          subject: content.headline,
-          content,
+          subject: content.subject || readBlockField('headline') || content.headline,
+          content: prepareContentForSave(content),
         }),
       });
     } catch {
@@ -757,15 +935,19 @@ function EditorContent() {
         throw new Error(data.error || 'Error al generar el copy con IA.');
       }
 
-      const { historyId, engine: usedEngine, ...emailData } = data;
+      const { historyId, engine: usedEngine, document } = data;
 
-      // Merge generated copy with existing styling details
+      // D2: /api/generate devuelve un EmailDocumentV4; su copy vive en document.blocks[].
+      // Convertimos a EmailContent y adoptamos los bloques + asunto/preheader
+      // generados, conservando la paleta/estilo actual del email.
       setContent(prev => {
-        const next = {
+        const generated: Partial<EmailContent> = document ? documentToContent(document) : {};
+        const next = ensureContentBlocks({
           ...prev,
-          ...emailData,
-          bullets: emailData.bullets || prev.bullets,
-        };
+          subject: generated.subject ?? prev.subject,
+          preheader: generated.preheader ?? prev.preheader,
+          blocks: generated.blocks ?? prev.blocks,
+        });
         saveHistory(next);
         return next;
       });
@@ -824,12 +1006,12 @@ function EditorContent() {
     showToast('🎨 Colores de marca aplicados con éxito');
   };
 
-  // 2. Micro-Acciones de IA
-  const handleRefineField = async (field: keyof EmailContent, command: string, index?: number) => {
-    const currentVal = index !== undefined 
-      ? (content.bullets[index] || '')
-      : (content[field] as string || '');
-      
+  // 2. Micro-Acciones de IA — lee/escribe sobre content.blocks[] (D2)
+  const handleRefineField = async (field: ContentField, command: string, index?: number) => {
+    const currentVal = index !== undefined
+      ? (bulletsForForm[index] || '')
+      : readBlockField(field);
+
     if (!currentVal.trim()) {
       showToast('⚠️ Escribe algo en el campo antes de mejorarlo con IA', 'error');
       return;
@@ -858,23 +1040,32 @@ function EditorContent() {
       }
 
       const refinedText = data.result;
-      
+
       if (index !== undefined) {
-        const newBullets = [...content.bullets];
-        newBullets[index] = refinedText;
         setContent(prev => {
-          const next = { ...prev, bullets: newBullets };
+          const base = ensureContentBlocks(prev);
+          const blocks = base.blocks || [];
+          const idx = blocks.findIndex(b => b.type === 'bullets');
+          let nextBlocks: BlockConfig[];
+          if (idx >= 0) {
+            const bullets = [...(blocks[idx] as BulletsBlockConfig).bullets];
+            while (bullets.length <= index) bullets.push('');
+            bullets[index] = refinedText;
+            nextBlocks = blocks.map((b, i) => i === idx ? ({ ...b, bullets } as BlockConfig) : b);
+          } else {
+            const seed = [...(base.bullets ?? [])];
+            while (seed.length <= index) seed.push('');
+            seed[index] = refinedText;
+            nextBlocks = insertBlockInOrder(blocks, { ...createDefaultBlock('bullets'), bullets: seed } as BlockConfig);
+          }
+          const next = { ...base, blocks: nextBlocks };
           saveHistory(next);
           return next;
         });
       } else {
-        setContent(prev => {
-          const next = { ...prev, [field]: refinedText };
-          saveHistory(next);
-          return next;
-        });
+        writeBlockField(field, refinedText, true);
       }
-      
+
       showToast('🤖 Texto optimizado con éxito');
     } catch (err) {
       showToast((err instanceof Error ? err.message : null) || 'Error al comunicarse con Gemini API', 'error');
@@ -941,7 +1132,7 @@ function EditorContent() {
       }));
       const shareUrl = `${window.location.origin}${window.location.pathname}?share=${b64}`;
       
-      const subject = encodeURIComponent(`[Borrador] Email - ${content.headline || brand?.name}`);
+      const subject = encodeURIComponent(`[Borrador] Email - ${content.subject || readBlockField('headline') || brand?.name}`);
       const body = encodeURIComponent(
         `Hola,\n\nTe comparto el borrador del correo diseñado para la marca "${brand?.name}".\n\nPuedes abrir e importar este borrador haciendo clic en el siguiente enlace:\n${shareUrl}\n\nAD Media Solution Email Builder`
       );
@@ -955,10 +1146,11 @@ function EditorContent() {
   };
 
   // Render Inline AI Actions dropdown
-  const renderInlineAiActions = (field: keyof EmailContent, index?: number) => {
+  const renderInlineAiActions = (field: ContentField, index?: number) => {
     const isPending = refineField === (index !== undefined ? `bullet-${index}` : field);
     return (
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <EmojiPicker onSelect={insertEmojiAtFocusedField} />
         {isPending ? (
           <span style={{ fontSize: 10, color: 'var(--text-accent)', animation: 'pulse 1s infinite' }}>🤖...</span>
         ) : (
@@ -1054,10 +1246,11 @@ function EditorContent() {
       name: newDraftName.trim(),
       brandName: brand?.name || 'Marca Desconocida',
       templateName: template?.name || 'Plantilla Desconocida',
-      content: JSON.parse(JSON.stringify(content)),
+      content: JSON.parse(JSON.stringify(prepareContentForSave(content))),
       brandId: selectedBrandId,
       template: selectedTemplate,
-      date: new Date().toLocaleString('es-ES', { hour12: false }),
+      // El schema de guardado exige ISO 8601 (no un string localizado).
+      date: new Date().toISOString(),
     };
 
     try {
@@ -1081,9 +1274,11 @@ function EditorContent() {
     if (confirm(`¿Cargar el borrador "${draft.name}"? Se perderán los cambios actuales.`)) {
       if (draft.brandId) setSelectedBrandId(draft.brandId);
       if (draft.template) setSelectedTemplate(draft.template);
-      setContent(draft.content);
+      // D1: los borradores viejos guardados sin blocks se migran al cargarlos.
+      const loadedDraft = ensureContentBlocks(draft.content);
+      setContent(loadedDraft);
       // Reset history with this loaded draft
-      setHistory([JSON.parse(JSON.stringify(draft.content))]);
+      setHistory([JSON.parse(JSON.stringify(loadedDraft))]);
       setHistoryIndex(0);
       showToast('📥 Borrador cargado con éxito');
     }
@@ -1122,7 +1317,7 @@ function EditorContent() {
         },
         body: JSON.stringify({
           toEmail: testEmail.trim(),
-          subject: `[Prueba] - ${content.headline || brand?.name}`,
+          subject: `[Prueba] - ${content.subject || readBlockField('headline') || brand?.name}`,
           html: htmlOutput,
         }),
       });
@@ -1372,19 +1567,20 @@ function EditorContent() {
                             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
                               <input
                                 type="checkbox"
-                                checked={Boolean(content.hero)}
-                                onChange={e => setBlockValue({ hero: e.target.checked ? { imageUrl: '', fullBleed: true } : undefined })}
+                                checked={Boolean(heroBlock)}
+                                onChange={e => toggleBlock('hero', e.target.checked, { fullBleed: true })}
                               />
                               🖼️ Imagen Hero {content.layout === 'hero' ? '(arriba de todo)' : '(bajo el header)'}
                             </label>
-                            {content.hero && (
+                            {heroBlock && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border-subtle)' }}>
                                 <div style={{ display: 'flex', gap: 6 }}>
                                   <input
                                     id="content-hero"
                                     className="form-input"
-                                    value={content.hero.imageUrl}
-                                    onChange={e => setBlockValue({ hero: { ...content.hero!, imageUrl: e.target.value } })}
+                                    value={heroBlock.imageUrl}
+                                    onChange={e => patchFirstBlock('hero', { imageUrl: e.target.value })}
+                                    onBlur={() => saveHistory(content)}
                                     placeholder="URL de la imagen hero…"
                                     spellCheck={false}
                                     style={{ flex: 1, fontSize: 12 }}
@@ -1396,8 +1592,9 @@ function EditorContent() {
                                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                                   <input
                                     className="form-input"
-                                    value={content.hero.href || ''}
-                                    onChange={e => setBlockValue({ hero: { ...content.hero!, href: e.target.value } })}
+                                    value={heroBlock.href || ''}
+                                    onChange={e => patchFirstBlock('hero', { href: e.target.value })}
+                                    onBlur={() => saveHistory(content)}
                                     placeholder="Link al hacer clic (opcional)…"
                                     spellCheck={false}
                                     style={{ flex: 1, fontSize: 12 }}
@@ -1405,8 +1602,8 @@ function EditorContent() {
                                   <label style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}>
                                     <input
                                       type="checkbox"
-                                      checked={content.hero.fullBleed !== false}
-                                      onChange={e => setBlockValue({ hero: { ...content.hero!, fullBleed: e.target.checked } })}
+                                      checked={heroBlock.fullBleed !== false}
+                                      onChange={e => patchFirstBlock('hero', { fullBleed: e.target.checked }, true)}
                                     />
                                     Sin margen
                                   </label>
@@ -1420,19 +1617,20 @@ function EditorContent() {
                             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
                               <input
                                 type="checkbox"
-                                checked={Boolean(content.imageText)}
-                                onChange={e => setBlockValue({ imageText: e.target.checked ? { imageUrl: '', text: '', imagePosition: 'left' } : undefined })}
+                                checked={Boolean(imageTextBlock)}
+                                onChange={e => toggleBlock('image-text', e.target.checked)}
                               />
                               📰 Imagen + Texto
                             </label>
-                            {content.imageText && (
+                            {imageTextBlock && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border-subtle)' }}>
                                 <div style={{ display: 'flex', gap: 6 }}>
                                   <input
                                     id="content-imageText"
                                     className="form-input"
-                                    value={content.imageText.imageUrl}
-                                    onChange={e => setBlockValue({ imageText: { ...content.imageText!, imageUrl: e.target.value } })}
+                                    value={imageTextBlock.imageUrl}
+                                    onChange={e => patchFirstBlock('image-text', { imageUrl: e.target.value })}
+                                    onBlur={() => saveHistory(content)}
                                     placeholder="URL de la imagen…"
                                     spellCheck={false}
                                     style={{ flex: 1, fontSize: 12 }}
@@ -1443,15 +1641,17 @@ function EditorContent() {
                                 </div>
                                 <input
                                   className="form-input"
-                                  value={content.imageText.title || ''}
-                                  onChange={e => setBlockValue({ imageText: { ...content.imageText!, title: e.target.value } })}
+                                  value={imageTextBlock.title || ''}
+                                  onChange={e => patchFirstBlock('image-text', { title: e.target.value })}
+                                  onBlur={() => saveHistory(content)}
                                   placeholder="Título del bloque (opcional)…"
                                   style={{ fontSize: 12 }}
                                 />
                                 <textarea
                                   className="form-textarea"
-                                  value={content.imageText.text}
-                                  onChange={e => setBlockValue({ imageText: { ...content.imageText!, text: e.target.value } })}
+                                  value={imageTextBlock.text}
+                                  onChange={e => patchFirstBlock('image-text', { text: e.target.value })}
+                                  onBlur={() => saveHistory(content)}
                                   placeholder="Texto que acompaña a la imagen…"
                                   rows={3}
                                   style={{ fontSize: 12 }}
@@ -1459,8 +1659,8 @@ function EditorContent() {
                                 <select
                                   aria-label="Posición de la imagen"
                                   className="form-select"
-                                  value={content.imageText.imagePosition}
-                                  onChange={e => setBlockValue({ imageText: { ...content.imageText!, imagePosition: e.target.value as 'left' | 'right' } })}
+                                  value={imageTextBlock.imagePosition}
+                                  onChange={e => patchFirstBlock('image-text', { imagePosition: e.target.value as 'left' | 'right' }, true)}
                                   style={{ fontSize: 12, width: 180 }}
                                 >
                                   <option value="left">Imagen a la izquierda</option>
@@ -1475,22 +1675,23 @@ function EditorContent() {
                             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
                               <input
                                 type="checkbox"
-                                checked={Boolean(content.gallery)}
-                                onChange={e => setBlockValue({ gallery: e.target.checked ? { images: [{ url: '' }, { url: '' }], columns: 2 } : undefined })}
+                                checked={Boolean(galleryBlock)}
+                                onChange={e => toggleBlock('gallery', e.target.checked, { images: [{ url: '' }, { url: '' }], columns: 2 })}
                               />
                               🎞️ Galería de imágenes (adsets)
                             </label>
-                            {content.gallery && (
+                            {galleryBlock && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border-subtle)' }}>
-                                {content.gallery.images.map((img, i) => (
+                                {galleryBlock.images.map((img, i) => (
                                   <div key={i} style={{ display: 'flex', gap: 6 }}>
                                     <input
                                       className="form-input"
                                       value={img.url}
                                       onChange={e => {
-                                        const images = content.gallery!.images.map((im, j) => (j === i ? { ...im, url: e.target.value } : im));
-                                        setBlockValue({ gallery: { ...content.gallery!, images } });
+                                        const images = galleryBlock.images.map((im, j) => (j === i ? { ...im, url: e.target.value } : im));
+                                        patchFirstBlock('gallery', { images });
                                       }}
+                                      onBlur={() => saveHistory(content)}
                                       placeholder={`Imagen ${i + 1}…`}
                                       spellCheck={false}
                                       style={{ flex: 1, fontSize: 12 }}
@@ -1502,8 +1703,9 @@ function EditorContent() {
                                       type="button"
                                       className="btn btn-ghost btn-icon"
                                       onClick={() => {
-                                        const images = content.gallery!.images.filter((_, j) => j !== i);
-                                        setBlockValue({ gallery: images.length ? { ...content.gallery!, images } : undefined });
+                                        const images = galleryBlock.images.filter((_, j) => j !== i);
+                                        if (images.length) patchFirstBlock('gallery', { images }, true);
+                                        else toggleBlock('gallery', false);
                                       }}
                                       aria-label={`Quitar imagen ${i + 1}`}
                                       style={{ fontSize: 12, height: 36, flexShrink: 0 }}
@@ -1516,7 +1718,7 @@ function EditorContent() {
                                   <button
                                     type="button"
                                     className="btn btn-ghost btn-sm"
-                                    onClick={() => setBlockValue({ gallery: { ...content.gallery!, images: [...content.gallery!.images, { url: '' }] } })}
+                                    onClick={() => patchFirstBlock('gallery', { images: [...galleryBlock.images, { url: '' }] }, true)}
                                     style={{ fontSize: 11 }}
                                   >
                                     + Agregar imagen
@@ -1524,8 +1726,8 @@ function EditorContent() {
                                   <select
                                     aria-label="Columnas de la galería"
                                     className="form-select"
-                                    value={content.gallery.columns}
-                                    onChange={e => setBlockValue({ gallery: { ...content.gallery!, columns: parseInt(e.target.value, 10) === 3 ? 3 : 2 } })}
+                                    value={galleryBlock.columns}
+                                    onChange={e => patchFirstBlock('gallery', { columns: parseInt(e.target.value, 10) === 3 ? 3 : 2 }, true)}
                                     style={{ fontSize: 12, width: 130 }}
                                   >
                                     <option value={2}>2 columnas</option>
@@ -1534,8 +1736,9 @@ function EditorContent() {
                                 </div>
                                 <input
                                   className="form-input"
-                                  value={content.gallery.caption || ''}
-                                  onChange={e => setBlockValue({ gallery: { ...content.gallery!, caption: e.target.value } })}
+                                  value={galleryBlock.caption || ''}
+                                  onChange={e => patchFirstBlock('gallery', { caption: e.target.value })}
+                                  onBlur={() => saveHistory(content)}
                                   placeholder="Pie de galería (opcional)…"
                                   style={{ fontSize: 12 }}
                                 />
@@ -1548,18 +1751,19 @@ function EditorContent() {
                             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
                               <input
                                 type="checkbox"
-                                checked={Boolean(content.quote)}
-                                onChange={e => setBlockValue({ quote: e.target.checked ? { text: '' } : undefined })}
+                                checked={Boolean(quoteBlock)}
+                                onChange={e => toggleBlock('quote', e.target.checked)}
                               />
                               💬 Testimonio / Cita
                             </label>
-                            {content.quote && (
+                            {quoteBlock && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border-subtle)' }}>
                                 <textarea
                                   id="content-quote"
                                   className="form-textarea"
-                                  value={content.quote.text}
-                                  onChange={e => setBlockValue({ quote: { ...content.quote!, text: e.target.value } })}
+                                  value={quoteBlock.text}
+                                  onChange={e => patchFirstBlock('quote', { text: e.target.value })}
+                                  onBlur={() => saveHistory(content)}
                                   placeholder="Texto del testimonio…"
                                   rows={2}
                                   style={{ fontSize: 12 }}
@@ -1567,15 +1771,17 @@ function EditorContent() {
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                                   <input
                                     className="form-input"
-                                    value={content.quote.author || ''}
-                                    onChange={e => setBlockValue({ quote: { ...content.quote!, author: e.target.value } })}
+                                    value={quoteBlock.author || ''}
+                                    onChange={e => patchFirstBlock('quote', { author: e.target.value })}
+                                    onBlur={() => saveHistory(content)}
                                     placeholder="Autor (opcional)…"
                                     style={{ fontSize: 12 }}
                                   />
                                   <input
                                     className="form-input"
-                                    value={content.quote.role || ''}
-                                    onChange={e => setBlockValue({ quote: { ...content.quote!, role: e.target.value } })}
+                                    value={quoteBlock.role || ''}
+                                    onChange={e => patchFirstBlock('quote', { role: e.target.value })}
+                                    onBlur={() => saveHistory(content)}
                                     placeholder="Cargo / detalle…"
                                     style={{ fontSize: 12 }}
                                   />
@@ -1584,16 +1790,38 @@ function EditorContent() {
                             )}
                           </div>
 
-                          {/* Separadores */}
+                          {/* Orden de bloques — reordenar desde Contenido (igual que Canvas) */}
                           <div className="form-group">
-                            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                              <input
-                                type="checkbox"
-                                checked={Boolean(content.showDividers)}
-                                onChange={e => setBlockValue({ showDividers: e.target.checked })}
-                              />
-                              ➖ Separadores sutiles entre secciones
-                            </label>
+                            <label className="form-label">🔃 Orden de los bloques</label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              {effectiveBlocks.map((block, i) => (
+                                <div key={block.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: 12 }}>
+                                  <span style={{ flex: 1, textTransform: 'capitalize', color: 'var(--text-secondary)' }}>
+                                    {i + 1}. {CANVAS_BLOCK_LABELS[block.type] || block.type}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-icon"
+                                    onClick={() => moveContentBlock(i, i - 1)}
+                                    disabled={i === 0}
+                                    aria-label={`Subir bloque ${i + 1}`}
+                                    style={{ fontSize: 12, height: 28, opacity: i === 0 ? 0.3 : 1 }}
+                                  >
+                                    ↑
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-icon"
+                                    onClick={() => moveContentBlock(i, i + 1)}
+                                    disabled={i === effectiveBlocks.length - 1}
+                                    aria-label={`Bajar bloque ${i + 1}`}
+                                    style={{ fontSize: 12, height: 28, opacity: i === effectiveBlocks.length - 1 ? 0.3 : 1 }}
+                                  >
+                                    ↓
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       )}
@@ -1737,6 +1965,32 @@ function EditorContent() {
                       </button>
                       {expandedSections.content && (
                         <div className="accordion-content">
+                          {/* Asunto & Preheader (metadatos del email) */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div className="form-group">
+                              <label htmlFor="content-subject" className="form-label">✉️ Asunto</label>
+                              <input
+                                id="content-subject"
+                                className="form-input"
+                                value={content.subject || ''}
+                                onChange={e => updateContent('subject', e.target.value)}
+                                onBlur={() => saveHistory(content)}
+                                placeholder="Asunto del email…"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label htmlFor="content-preheader" className="form-label">👀 Preheader</label>
+                              <input
+                                id="content-preheader"
+                                className="form-input"
+                                value={content.preheader || ''}
+                                onChange={e => updateContent('preheader', e.target.value)}
+                                onBlur={() => saveHistory(content)}
+                                placeholder="Texto de vista previa (bandeja)…"
+                              />
+                            </div>
+                          </div>
+
                           {/* Content Form */}
                           <div className="form-group">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -1746,8 +2000,8 @@ function EditorContent() {
                             <input
                               id="content-label"
                               className="form-input"
-                              value={content.label}
-                              onChange={e => updateContent('label', e.target.value)}
+                              value={readBlockField('label')}
+                              onChange={e => writeBlockField('label', e.target.value)}
                               onBlur={() => saveHistory(content)}
                               placeholder="Ej: Masterclass gratuita…"
                             />
@@ -1761,8 +2015,8 @@ function EditorContent() {
                             <input
                               id="content-headline"
                               className="form-input"
-                              value={content.headline}
-                              onChange={e => updateContent('headline', e.target.value)}
+                              value={readBlockField('headline')}
+                              onChange={e => writeBlockField('headline', e.target.value)}
                               onBlur={() => saveHistory(content)}
                               placeholder="Ej: Aprende a reparar tu crédito…"
                             />
@@ -1776,8 +2030,8 @@ function EditorContent() {
                             <textarea
                               id="content-body"
                               className="form-textarea"
-                              value={content.body}
-                              onChange={e => updateContent('body', e.target.value)}
+                              value={readBlockField('body')}
+                              onChange={e => writeBlockField('body', e.target.value)}
                               onBlur={() => saveHistory(content)}
                               placeholder="Texto principal del email. Puedes usar {{contact.first_name}} para personalizar…"
                               rows={6}
@@ -1792,8 +2046,8 @@ function EditorContent() {
                             <input
                               id="bullets-title"
                               className="form-input"
-                              value={content.bulletsTitle}
-                              onChange={e => updateContent('bulletsTitle', e.target.value)}
+                              value={readBlockField('bulletsTitle')}
+                              onChange={e => writeBlockField('bulletsTitle', e.target.value)}
                               onBlur={() => saveHistory(content)}
                               placeholder="Ej: En esta clase vas a descubrir…"
                             />
@@ -1802,12 +2056,13 @@ function EditorContent() {
                           <div className="form-group">
                             <label className="form-label">Bullets</label>
                             <div className="bullet-list">
-                              {content.bullets.map((bullet, i) => (
+                              {bulletsForForm.map((bullet, i) => (
                                 <div key={i} className="bullet-item" style={{ display: 'flex', gap: 6, alignItems: 'flex-end', marginBottom: 12 }}>
                                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                       <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Punto {i + 1}</span>
-                                      {renderInlineAiActions('bullets', i)}
+                                      {/* index define el bullet; el campo es ignorado por handleRefineField */}
+                                      {renderInlineAiActions('bulletsTitle', i)}
                                     </div>
                                     <input
                                       className="form-input"
@@ -1840,8 +2095,8 @@ function EditorContent() {
                               <input
                                 id="event-date"
                                 className="form-input"
-                                value={content.eventDate}
-                                onChange={e => updateContent('eventDate', e.target.value)}
+                                value={readBlockField('eventDate')}
+                                onChange={e => writeBlockField('eventDate', e.target.value)}
                                 onBlur={() => saveHistory(content)}
                                 placeholder="Ej: 18 de julio…"
                               />
@@ -1851,8 +2106,8 @@ function EditorContent() {
                               <input
                                 id="event-time"
                                 className="form-input"
-                                value={content.eventTime}
-                                onChange={e => updateContent('eventTime', e.target.value)}
+                                value={readBlockField('eventTime')}
+                                onChange={e => writeBlockField('eventTime', e.target.value)}
                                 onBlur={() => saveHistory(content)}
                                 placeholder="Ej: 11:00 AM…"
                               />
@@ -1867,8 +2122,8 @@ function EditorContent() {
                             <input
                               id="pre-cta"
                               className="form-input"
-                              value={content.preCta}
-                              onChange={e => updateContent('preCta', e.target.value)}
+                              value={readBlockField('preCta')}
+                              onChange={e => writeBlockField('preCta', e.target.value)}
                               onBlur={() => saveHistory(content)}
                               placeholder="Ej: Únete para recibir el acceso 👇…"
                             />
@@ -1884,8 +2139,8 @@ function EditorContent() {
                                 id="cta-text"
                                 aria-label="Texto del botón"
                                 className="form-input"
-                                value={content.ctaText}
-                                onChange={e => updateContent('ctaText', e.target.value)}
+                                value={readBlockField('ctaText')}
+                                onChange={e => writeBlockField('ctaText', e.target.value)}
                                 onBlur={() => saveHistory(content)}
                                 placeholder="Texto del botón…"
                               />
@@ -1893,10 +2148,36 @@ function EditorContent() {
                                 id="cta-url"
                                 aria-label="URL de destino"
                                 className="form-input"
-                                value={content.ctaUrl}
-                                onChange={e => updateContent('ctaUrl', e.target.value)}
+                                value={readBlockField('ctaUrl')}
+                                onChange={e => writeBlockField('ctaUrl', e.target.value)}
                                 onBlur={() => saveHistory(content)}
                                 placeholder="URL destino (GHL/Link)…"
+                                spellCheck={false}
+                              />
+                            </div>
+                          </div>
+
+                          {/* CTA secundario (opcional) — antes solo editable desde Canvas */}
+                          <div className="form-group">
+                            <label className="form-label">Botón CTA secundario (opcional)</label>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                              <input
+                                id="secondary-cta-text"
+                                aria-label="Texto del botón secundario"
+                                className="form-input"
+                                value={readBlockField('secondaryCtaText')}
+                                onChange={e => writeBlockField('secondaryCtaText', e.target.value)}
+                                onBlur={() => saveHistory(content)}
+                                placeholder="Texto del botón secundario…"
+                              />
+                              <input
+                                id="secondary-cta-url"
+                                aria-label="URL del botón secundario"
+                                className="form-input"
+                                value={readBlockField('secondaryCtaUrl')}
+                                onChange={e => writeBlockField('secondaryCtaUrl', e.target.value)}
+                                onBlur={() => saveHistory(content)}
+                                placeholder="URL destino secundario…"
                                 spellCheck={false}
                               />
                             </div>
@@ -1910,8 +2191,8 @@ function EditorContent() {
                             <input
                               id="footer-note"
                               className="form-input"
-                              value={content.footerNote}
-                              onChange={e => updateContent('footerNote', e.target.value)}
+                              value={readBlockField('footerNote')}
+                              onChange={e => writeBlockField('footerNote', e.target.value)}
                               onBlur={() => saveHistory(content)}
                               placeholder="Ej: Cupos limitados · Reserva tu lugar ahora…"
                             />
@@ -1934,8 +2215,10 @@ function EditorContent() {
                       {expandedSections.health && (
                         <div className="accordion-content">
                           {(() => {
+                            // D2: métricas leídas desde content.blocks[] (fuente de verdad).
+                            const mBody = readBlockField('body');
                             const getWordsCount = () => {
-                              const text = `${content.label} ${content.headline} ${content.body} ${content.bulletsTitle} ${content.bullets.join(' ')} ${content.preCta} ${content.ctaText} ${content.footerNote}`;
+                              const text = `${readBlockField('label')} ${readBlockField('headline')} ${mBody} ${readBlockField('bulletsTitle')} ${bulletsForForm.join(' ')} ${readBlockField('preCta')} ${readBlockField('ctaText')} ${readBlockField('footerNote')}`;
                               return text.trim().split(/\s+/).filter(Boolean).length;
                             };
                             const words = getWordsCount();
@@ -1950,10 +2233,11 @@ function EditorContent() {
                               'GARANTIZADO', 'HAZLO HOY', 'ACCESO INMEDIATO', 'OFERTA UNICA'
                             ];
 
-                            const textForSpam = `${content.headline} ${content.body}`.toUpperCase();
+                            const textForSpam = `${readBlockField('headline')} ${mBody}`.toUpperCase();
                             const spamMatches = SPAM_WORDS.filter(word => textForSpam.includes(word));
-                            const isCtaValid = content.ctaUrl && content.ctaUrl !== '#' && content.ctaText.trim().length > 0;
-                            const hasPersonalization = content.body.includes('{{contact.first_name}}');
+                            const mCtaUrl = readBlockField('ctaUrl');
+                            const isCtaValid = Boolean(mCtaUrl) && mCtaUrl !== '#' && readBlockField('ctaText').trim().length > 0;
+                            const hasPersonalization = mBody.includes('{{contact.first_name}}');
 
                             // Chequeos sobre el HTML final: peso (Gmail recorta ~102KB), imágenes y links
                             const htmlChecks = analyzeEmailHtml(htmlOutput);

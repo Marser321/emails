@@ -140,6 +140,9 @@ export type CanvasBlockType =
   | 'infobox'
   | 'quote'
   | 'cta'
+  | 'band'
+  | 'badge'
+  | 'callout'
   | 'divider'
   | 'spacer'
   | 'footer';
@@ -195,6 +198,8 @@ export interface BulletsBlockConfig extends BlockBase {
   type: 'bullets';
   bulletsTitle?: string;
   bullets: string[];
+  marker?: string;
+  perBulletMarker?: string[];
 }
 
 export interface InfoboxBlockConfig extends BlockBase {
@@ -217,10 +222,49 @@ export interface CtaBlockConfig extends BlockBase {
   preCta?: string;
   secondaryCtaText?: string;
   secondaryCtaUrl?: string;
+  ctaBgColor?: string;
+  ctaTextColor?: string;
+  ctaRadius?: number;
+  ctaFullWidth?: boolean;
+  ctaSize?: 'sm' | 'md' | 'lg';
+}
+
+export interface BandBlockConfig extends BlockBase {
+  type: 'band';
+  bgColor?: string;
+  useGradient?: boolean;
+  gradientStart?: string;
+  gradientEnd?: string;
+  text?: string;
+  textColor?: string;
+  emoji?: string;
+  height?: number; // px 4-80, used when there is no text
+}
+
+export interface BadgeBlockConfig extends BlockBase {
+  type: 'badge';
+  text: string;
+  emoji?: string;
+  bgColor?: string;
+  textColor?: string;
+  align?: 'left' | 'center' | 'right';
+}
+
+export interface CalloutBlockConfig extends BlockBase {
+  type: 'callout';
+  emoji?: string;
+  title?: string;
+  body?: string;
+  bgColor?: string;
+  accentColor?: string;
 }
 
 export interface DividerBlockConfig extends BlockBase {
   type: 'divider';
+  color?: string;
+  thickness?: number; // px 1-8, default 1
+  lineStyle?: 'solid' | 'dashed' | 'dotted';
+  ornament?: string;
 }
 
 export interface SpacerBlockConfig extends BlockBase {
@@ -244,6 +288,9 @@ export type BlockConfig =
   | InfoboxBlockConfig
   | QuoteBlockConfig
   | CtaBlockConfig
+  | BandBlockConfig
+  | BadgeBlockConfig
+  | CalloutBlockConfig
   | DividerBlockConfig
   | SpacerBlockConfig
   | FooterBlockConfig;
@@ -259,6 +306,9 @@ export const CANVAS_BLOCK_CATALOG: { type: CanvasBlockType; label: string }[] = 
   { type: 'infobox', label: 'Info Box' },
   { type: 'quote', label: 'Testimonio' },
   { type: 'cta', label: 'Botón CTA' },
+  { type: 'band', label: 'Banda de color' },
+  { type: 'badge', label: 'Etiqueta Badge' },
+  { type: 'callout', label: 'Caja destacada' },
   { type: 'divider', label: 'Separador' },
   { type: 'spacer', label: 'Espaciador' },
   { type: 'footer', label: 'Footer' },
@@ -269,20 +319,49 @@ export function generateBlockId(): string {
   return 'blk_' + Math.random().toString(36).substring(2, 9);
 }
 
+// Fábrica de bloques con sus defaults. Compartida entre el editor Canvas y la
+// pestaña "Contenido" (D2): cuando el usuario empieza a escribir en un campo de
+// Contenido cuyo bloque aún no existe, se crea con estos mismos defaults para
+// que Canvas y Contenido queden idénticos.
+export function createDefaultBlock(type: CanvasBlockType): BlockConfig {
+  const id = generateBlockId();
+  switch (type) {
+    case 'header':     return { id, type };
+    case 'hero':       return { id, type, imageUrl: '', alt: '' };
+    case 'text':       return { id, type, label: '', headline: '', body: '' };
+    case 'image-text': return { id, type, imageUrl: '', text: '', imagePosition: 'left' as const };
+    case 'gallery':    return { id, type, images: [], columns: 2 as const };
+    case 'bullets':    return { id, type, bullets: ['', '', ''], marker: '•' };
+    case 'infobox':    return { id, type, eventDate: '', eventTime: '' };
+    case 'quote':      return { id, type, text: '', author: '' };
+    case 'cta':        return { id, type, ctaText: '', ctaUrl: '', ctaTextColor: '#ffffff', ctaRadius: 8, ctaFullWidth: false, ctaSize: 'md' };
+    case 'band':       return { id, type, bgColor: '#29abe2', useGradient: false, gradientStart: '#29abe2', gradientEnd: '#1b6fc4', text: '', textColor: '#ffffff', emoji: '', height: 20 };
+    case 'badge':      return { id, type, text: '', emoji: '', textColor: '#ffffff', align: 'center' };
+    case 'callout':    return { id, type, emoji: '', title: '', body: '' };
+    case 'divider':    return { id, type, color: '#e5eaf0', thickness: 1, lineStyle: 'solid', ornament: '' };
+    case 'spacer':     return { id, type, height: 20 };
+    case 'footer':     return { id, type, footerNote: '' };
+  }
+}
+
 export interface EmailContent {
   subject?: string;
   preheader?: string;
-  label: string;
-  headline: string;
-  body: string;
-  bulletsTitle: string;
-  bullets: string[];
-  ctaText: string;
-  ctaUrl: string;
-  eventDate: string;
-  eventTime: string;
-  preCta: string;
-  footerNote: string;
+  // ===== Campos legacy de CONTENIDO — SOLO LECTURA (retro-compatibilidad) =====
+  // D3: `content.blocks[]` es la fuente única de verdad. Estos campos solo se
+  // POBLAN en la capa de migración (`email-document.ts`: `legacyContentToBlocks`
+  // los LEE al abrir un email viejo). La UI ya no los escribe — no asignarlos.
+  label?: string;
+  headline?: string;
+  body?: string;
+  bulletsTitle?: string;
+  bullets?: string[];
+  ctaText?: string;
+  ctaUrl?: string;
+  eventDate?: string;
+  eventTime?: string;
+  preCta?: string;
+  footerNote?: string;
   emailBgColor?: string;
   bodyBgColor?: string;
   primaryColor?: string;

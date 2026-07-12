@@ -14,11 +14,19 @@ describe('template presets', () => {
     expect(presetsForObjective('masterclass')).toHaveLength(2);
   });
 
-  it('preserves semantic copy while replacing composition', () => {
+  it('preserves semantic copy from blocks while replacing composition', () => {
+    // D3: el contenido del usuario vive en content.blocks[] (no en campos legacy);
+    // aplicar un preset preserva ese contenido y solo cambia la composición.
     const preset = TEMPLATE_PRESETS.find(item => item.id === 'workshop')!;
-    const result = applyPresetPreservingContent(preset, { ...preset.defaultContent, headline: 'Titular propio', body: 'Texto propio' });
+    const edited = structuredClone(preset.defaultContent);
+    const textBlock = edited.blocks!.find(block => block.type === 'text');
+    if (textBlock && textBlock.type === 'text') { textBlock.headline = 'Titular propio'; textBlock.body = 'Texto propio'; }
+    const result = applyPresetPreservingContent(preset, edited);
     expect(result.presetId).toBe('workshop');
     expect(result.blocks?.find(block => block.type === 'text')).toMatchObject({ headline: 'Titular propio', body: 'Texto propio' });
+    // Los campos legacy de contenido ya no se propagan.
+    expect(result.headline).toBeUndefined();
+    expect(result.body).toBeUndefined();
   });
 
   it('renders all 18 presets for both starter brand palettes with inline typography', () => {

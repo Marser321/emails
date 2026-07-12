@@ -34,6 +34,14 @@ export function sanitizeColor(value: string | undefined, fallback: string): stri
   return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : fallback;
 }
 
+function lightenHexColor(hex: string, percent: number): string {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.min(255, (num >> 16) + Math.round((255 - (num >> 16)) * percent / 100));
+  const g = Math.min(255, ((num >> 8) & 0x00ff) + Math.round((255 - ((num >> 8) & 0x00ff)) * percent / 100));
+  const b = Math.min(255, (num & 0x0000ff) + Math.round((255 - (num & 0x0000ff)) * percent / 100));
+  return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, '0')}`;
+}
+
 export function sanitizeFont(value: string | undefined, fallback: string): string {
   const font = (value || '').trim();
   return /^[a-z0-9 -]{1,48}$/i.test(font) ? escapeHtml(font) : fallback;
@@ -70,7 +78,7 @@ export function clampOpt(value: number | undefined, min: number, max: number): n
     : undefined;
 }
 
-function sanitizeBlock(block: BlockConfig): BlockConfig {
+function sanitizeBlock(block: BlockConfig, accentColor = '#2979b8'): BlockConfig {
   const style = sanitizeBlockStyle(block.style);
   switch (block.type) {
     case 'hero':
@@ -94,7 +102,10 @@ function sanitizeBlock(block: BlockConfig): BlockConfig {
         borderRadius: clampOpt(block.borderRadius, 0, 32),
       };
     case 'bullets':
-      return { ...block, style, id: escapeHtml(block.id), bulletsTitle: escapeHtml(block.bulletsTitle || ''), bullets: block.bullets.map(escapeHtml) };
+      return {
+        ...block, style, id: escapeHtml(block.id), bulletsTitle: escapeHtml(block.bulletsTitle || ''), bullets: block.bullets.map(escapeHtml),
+        marker: escapeHtml(block.marker || ''), perBulletMarker: (block.perBulletMarker || []).map(escapeHtml),
+      };
     case 'infobox':
       return { ...block, style, id: escapeHtml(block.id), eventDate: escapeHtml(block.eventDate || ''), eventTime: escapeHtml(block.eventTime || '') };
     case 'quote':
@@ -106,6 +117,53 @@ function sanitizeBlock(block: BlockConfig): BlockConfig {
         ctaText: escapeHtml(block.ctaText || ''), ctaUrl: sanitizeEmailUrl(block.ctaUrl),
         preCta: escapeHtml(block.preCta || ''), secondaryCtaText: escapeHtml(block.secondaryCtaText || ''),
         secondaryCtaUrl: sanitizeEmailUrl(block.secondaryCtaUrl),
+        ctaBgColor: sanitizeColor(block.ctaBgColor, accentColor), ctaTextColor: sanitizeColor(block.ctaTextColor, '#ffffff'),
+        ctaRadius: clampOpt(block.ctaRadius, 0, 28),
+        ctaFullWidth: typeof block.ctaFullWidth === 'boolean' ? block.ctaFullWidth : false,
+        ctaSize: ['sm', 'md', 'lg'].includes(block.ctaSize || '') ? block.ctaSize : 'md',
+      };
+    case 'band':
+      return {
+        ...block, style,
+        id: escapeHtml(block.id),
+        bgColor: sanitizeColor(block.bgColor, '#29abe2'),
+        gradientStart: sanitizeColor(block.gradientStart, '#29abe2'),
+        gradientEnd: sanitizeColor(block.gradientEnd, '#1b6fc4'),
+        text: escapeHtml(block.text || ''),
+        textColor: sanitizeColor(block.textColor, '#ffffff'),
+        emoji: escapeHtml(block.emoji || ''),
+        height: clampOpt(block.height, 4, 80),
+      };
+    case 'badge':
+      return {
+        ...block, style,
+        id: escapeHtml(block.id),
+        text: escapeHtml(block.text || ''),
+        emoji: escapeHtml(block.emoji || ''),
+        bgColor: sanitizeColor(block.bgColor, accentColor),
+        textColor: sanitizeColor(block.textColor, '#ffffff'),
+        align: ['left', 'center', 'right'].includes(block.align || '') ? block.align : 'center',
+      };
+    case 'callout': {
+      const calloutAccent = sanitizeColor(block.accentColor, accentColor);
+      return {
+        ...block, style,
+        id: escapeHtml(block.id),
+        emoji: escapeHtml(block.emoji || ''),
+        title: escapeHtml(block.title || ''),
+        body: escapeTextWithBreaks(block.body || ''),
+        bgColor: sanitizeColor(block.bgColor, lightenHexColor(calloutAccent, 85)),
+        accentColor: calloutAccent,
+      };
+    }
+    case 'divider':
+      return {
+        ...block, style,
+        id: escapeHtml(block.id),
+        color: sanitizeColor(block.color, '#e5eaf0'),
+        thickness: clampOpt(block.thickness, 1, 8),
+        lineStyle: ['solid', 'dashed', 'dotted'].includes(block.lineStyle || '') ? block.lineStyle : 'solid',
+        ornament: escapeHtml(block.ornament || ''),
       };
     case 'footer':
       return { ...block, style, id: escapeHtml(block.id), footerNote: escapeHtml(block.footerNote || '') };
@@ -206,7 +264,7 @@ export function sanitizeContentForEmail(input: EmailContent): EmailContent {
     quote: input.quote ? {
       ...input.quote, text: escapeTextWithBreaks(input.quote.text || ''), author: escapeHtml(input.quote.author || ''), role: escapeHtml(input.quote.role || ''),
     } : undefined,
-    blocks: input.blocks?.map(sanitizeBlock),
+    blocks: input.blocks?.map(block => sanitizeBlock(block, sanitizeColor(input.accentColor, '#2979b8'))),
     compliance: input.compliance ? {
       unsubscribeLabel: escapeHtml(input.compliance.unsubscribeLabel || 'Cancelar suscripción'),
       unsubscribeUrl: sanitizeEmailUrl(input.compliance.unsubscribeUrl || '{{unsubscribe}}'),

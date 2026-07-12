@@ -1,5 +1,42 @@
-import type { BlockConfig, Brand, EmailContent, EmailDocumentV3, EmailDocumentV4, EmailTypography, TemplateType } from './types';
+import type { BlockConfig, CanvasBlockType, Brand, EmailContent, EmailDocumentV3, EmailDocumentV4, EmailTypography, TemplateType } from './types';
 import { defaultPresetForObjective } from './template-presets';
+
+// Orden canónico de render (el mismo que produce legacyContentToBlocks). Se usa
+// cuando la pestaña "Contenido" debe CREAR un bloque porque el usuario empezó a
+// escribir en un campo cuyo bloque aún no existía: el bloque nuevo se inserta en
+// la posición que respeta este orden, sin reordenar los bloques existentes.
+export const CANONICAL_BLOCK_ORDER: CanvasBlockType[] = [
+  'header', 'hero', 'text', 'image-text', 'bullets', 'gallery', 'quote', 'infobox',
+  'band', 'badge', 'callout', 'cta', 'divider', 'spacer', 'footer',
+];
+
+function canonicalIndex(type: CanvasBlockType): number {
+  const index = CANONICAL_BLOCK_ORDER.indexOf(type);
+  return index < 0 ? CANONICAL_BLOCK_ORDER.length : index;
+}
+
+// Inserta un bloque respetando el orden canónico entre los bloques actuales
+// (antes del primer bloque con orden mayor; si no hay, al final).
+export function insertBlockInOrder(blocks: BlockConfig[], block: BlockConfig): BlockConfig[] {
+  const order = canonicalIndex(block.type);
+  let at = blocks.length;
+  for (let i = 0; i < blocks.length; i++) {
+    if (canonicalIndex(blocks[i].type) > order) { at = i; break; }
+  }
+  const next = [...blocks];
+  next.splice(at, 0, block);
+  return next;
+}
+
+// Mueve un bloque de una posición a otra (reordenamiento). Función pura
+// compartida por el Canvas y la pestaña "Contenido".
+export function moveBlock(blocks: BlockConfig[], from: number, to: number): BlockConfig[] {
+  if (from === to || from < 0 || to < 0 || from >= blocks.length || to >= blocks.length) return blocks;
+  const next = [...blocks];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}
 
 export function legacyContentToBlocks(content: EmailContent): BlockConfig[] {
   const blocks: BlockConfig[] = [{ id: 'legacy-header', type: 'header' }];
@@ -16,12 +53,53 @@ export function legacyContentToBlocks(content: EmailContent): BlockConfig[] {
   if (content.eventDate || content.eventTime) blocks.push({ id: 'legacy-infobox', type: 'infobox', eventDate: content.eventDate, eventTime: content.eventTime });
   if (content.ctaText || content.preCta) {
     blocks.push({
-      id: 'legacy-cta', type: 'cta', ctaText: content.ctaText, ctaUrl: content.ctaUrl,
+      id: 'legacy-cta', type: 'cta', ctaText: content.ctaText || '', ctaUrl: content.ctaUrl || '',
       preCta: content.preCta, secondaryCtaText: content.secondaryCtaText, secondaryCtaUrl: content.secondaryCtaUrl,
     });
   }
   blocks.push({ id: 'legacy-footer', type: 'footer', footerNote: content.footerNote });
   return blocks;
+}
+
+// D1 — content.blocks[] como fuente única de verdad: usar en todo punto de
+// carga del editor (creación de email nuevo, reapertura desde historial,
+// carga de borradores) para migrar contenido legacy sin tocar su apariencia.
+// Si blocks ya está poblado (documento migrado o creado en Canvas) se
+// devuelve tal cual; si no, se deriva de los campos legacy con
+// legacyContentToBlocks, igual que hace renderEmail() al renderizar.
+export function ensureContentBlocks(content: EmailContent): EmailContent {
+  return content.blocks?.length ? content : { ...content, blocks: legacyContentToBlocks(content) };
+}
+
+// D2: prepara el contenido antes de persistir (borradores/historial). El editor
+// puede tener bloques en progreso incompletos (creados al vuelo al escribir un
+// campo); esto los ajusta para que pasen la validación estricta de guardado sin
+// perder datos reales:
+//  - descarta bloques estructurales vacíos (hero/imagen-texto sin imagen,
+//    galería sin imágenes, badge sin texto) — no hay nada que persistir.
+//  - rellena el `alt` obligatorio (accesibilidad) que la pestaña Contenido no
+//    expone, con un valor por defecto seguro.
+export function prepareContentForSave(content: EmailContent): EmailContent {
+  if (!content.blocks?.length) return content;
+  const blocks = content.blocks
+    .filter(block => {
+      switch (block.type) {
+        case 'hero':
+        case 'image-text': return Boolean(block.imageUrl?.trim());
+        case 'gallery': return (block.images || []).some(image => image.url?.trim());
+        case 'badge': return Boolean(block.text?.trim());
+        default: return true;
+      }
+    })
+    .map(block => {
+      if (block.type === 'hero') return { ...block, alt: block.alt?.trim() || 'Imagen' };
+      if (block.type === 'image-text') return { ...block, alt: block.alt?.trim() || 'Imagen' };
+      if (block.type === 'gallery') {
+        return { ...block, images: block.images.filter(image => image.url?.trim()).map(image => ({ ...image, alt: image.alt?.trim() || 'Imagen' })) };
+      }
+      return block;
+    });
+  return { ...content, blocks };
 }
 
 export function createEmailDocument(
@@ -69,11 +147,11 @@ export function createEmailDocument(
 }
 
 export function documentToContent(document: EmailDocumentV3 | EmailDocumentV4): EmailContent {
+  // D3: content.blocks[] es la fuente de verdad; no se rellenan campos legacy de
+  // contenido (quedan undefined). El render y la UI operan sobre blocks.
   return {
     subject: document.subject,
     preheader: document.preheader,
-    label: '', headline: '', body: '', bulletsTitle: '', bullets: [], ctaText: '', ctaUrl: '',
-    eventDate: '', eventTime: '', preCta: '', footerNote: '',
     emailWidth: document.emailWidth,
     emailBgColor: document.theme.pageBackground,
     bodyBgColor: document.theme.bodyBackground,

@@ -293,21 +293,44 @@ function renderDivider(show: boolean | undefined): string {
 /**
  * Render the CTA button with VML fallback for Outlook
  */
-function renderCTA(text: string, url: string, bgColor: string, fieldName: 'ctaText' | 'secondaryCtaText' | string = 'ctaText'): string {
+interface CtaRenderOptions {
+  textColor?: string;
+  radius?: number;
+  fullWidth?: boolean;
+  size?: 'sm' | 'md' | 'lg';
+  fullWidthPx?: number;
+}
+
+function renderCTA(text: string, url: string, bgColor: string, fieldName: 'ctaText' | 'secondaryCtaText' | string = 'ctaText', options: CtaRenderOptions = {}): string {
   if (!text || !url) return '';
-  
+
+  const textColor = options.textColor || '#ffffff';
+  const radius = options.radius ?? 8;
+  const size = options.size || 'md';
+  const sizeMap = {
+    sm: { padding: 10, fontSize: 15, height: 40 },
+    md: { padding: 15, fontSize: 17, height: 52 },
+    lg: { padding: 18, fontSize: 19, height: 58 },
+  } as const;
+  const dimensions = sizeMap[size];
+  const arcsize = Math.round(radius / dimensions.height * 100);
+  const vmlWidth = options.fullWidth ? (options.fullWidthPx || 536) : 320;
+  const linkLayout = options.fullWidth
+    ? 'display:block;text-align:center;width:100%;box-sizing:border-box;'
+    : 'display:inline-block;width:auto;';
+
   return `
   <!-- CTA Button -->
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="cta-table">
   <tr>
   <td align="center" style="padding:0 0 8px;">
     <!--[if mso]>
-    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${url}" style="height:52px;v-text-anchor:middle;width:320px;" arcsize="15%" fillcolor="${bgColor}">
-    <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:17px;font-weight:bold;">${text}</center>
+    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${url}" style="height:${dimensions.height}px;v-text-anchor:middle;width:${vmlWidth}px;" arcsize="${arcsize}%" fillcolor="${bgColor}">
+    <center style="color:${textColor};font-family:Arial,sans-serif;font-size:${dimensions.fontSize}px;font-weight:bold;">${text}</center>
     </v:roundrect>
     <![endif]-->
     <!--[if !mso]><!-->
-    <a href="${url}" target="_blank" rel="noopener noreferrer nofollow" class="cta-btn" data-editor-field="${fieldName}" style="display:inline-block;background:${bgColor};color:#ffffff;font-family:'Montserrat','Open Sans',Arial,sans-serif;font-size:17px;font-weight:700;text-decoration:none;padding:15px 42px;border-radius:8px;letter-spacing:0.5px;width:auto;">${text}</a>
+    <a href="${url}" target="_blank" rel="noopener noreferrer nofollow" class="cta-btn" data-editor-field="${fieldName}" style="${linkLayout}background:${bgColor};color:${textColor};font-family:'Montserrat','Open Sans',Arial,sans-serif;font-size:${dimensions.fontSize}px;font-weight:700;text-decoration:none;padding:${dimensions.padding}px 42px;border-radius:${radius}px;letter-spacing:0.5px;">${text}</a>
     <!--<![endif]-->
   </td>
   </tr>
@@ -421,7 +444,11 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number, cont
     }
 
     case 'bullets': {
-      const bulletsHtml = (block.bullets || []).filter(Boolean).map(item => `<p class="bullet-text" style="margin:0 0 7px;${textCss('text')}"><span style="color:${accent};font-weight:800;">&#8226;</span>&nbsp; ${item}</p>`).join('');
+      const bulletsHtml = (block.bullets || []).map((item, index) => ({ item, index })).filter(({ item }) => Boolean(item)).map(({ item, index }) => {
+        const marker = block.perBulletMarker?.[index] || block.marker || '•';
+        const markerColor = /\p{Extended_Pictographic}/u.test(marker) ? '' : `color:${accent};`;
+        return `<p class="bullet-text" style="margin:0 0 7px;${textCss('text')}"><span style="${markerColor}font-weight:800;">${marker}</span>&nbsp; ${item}</p>`;
+      }).join('');
       if (!bulletsHtml && !block.bulletsTitle) return '';
       return `
 <!-- ====== BLOCK ${index}: BULLETS ====== -->
@@ -465,7 +492,14 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number, cont
     }
 
     case 'cta': {
-      const ctaMain = renderCTA(block.ctaText, block.ctaUrl, accent, `${prefix}-ctaText`).replaceAll('color:#ffffff', `color:${ctaTextColor}`);
+      const ctaHorizontalPadding = (style.paddingLeft ?? 32) + (style.paddingRight ?? 32);
+      const ctaMain = renderCTA(block.ctaText, block.ctaUrl, block.ctaBgColor || accent, `${prefix}-ctaText`, {
+        textColor: block.ctaTextColor || ctaTextColor,
+        radius: block.ctaRadius,
+        fullWidth: block.ctaFullWidth,
+        size: block.ctaSize,
+        fullWidthPx: Math.max(240, (content.emailWidth || 600) - ctaHorizontalPadding),
+      });
       const ctaSec = block.secondaryCtaText && block.secondaryCtaUrl
         ? renderCTA(block.secondaryCtaText, block.secondaryCtaUrl, primary, `${prefix}-secondaryCtaText`)
         : '';
@@ -483,12 +517,101 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number, cont
 </tr>`;
     }
 
+    case 'band': {
+      const bgColor = block.bgColor || '#29abe2';
+      const gradient = block.useGradient
+        ? `background-image:linear-gradient(90deg,${block.gradientStart || bgColor},${block.gradientEnd || bgColor});`
+        : '';
+      if (!block.text) {
+        const height = block.height ?? 20;
+        return `
+<!-- ====== BLOCK ${index}: BAND ====== -->
+<tr>
+<td bgcolor="${bgColor}" style="height:${height}px;background-color:${bgColor};${gradient}line-height:${height}px;font-size:0;" data-block-id="${block.id}" data-editor-field="${prefix}">&nbsp;</td>
+</tr>`;
+      }
+      const bandText = [block.emoji, block.text].filter(Boolean).join(' ');
+      return `
+<!-- ====== BLOCK ${index}: BAND ====== -->
+<tr>
+<td align="center" bgcolor="${bgColor}" style="background-color:${bgColor};${gradient}padding:12px 24px;" data-block-id="${block.id}" data-editor-field="${prefix}">
+  <p style="margin:0;color:${block.textColor || '#ffffff'};font-weight:800;font-family:'${bodyFont}',Arial,sans-serif;">${bandText}</p>
+</td>
+</tr>`;
+    }
+
+    case 'badge': {
+      if (!block.text) return '';
+      const bgColor = block.bgColor || accent;
+      const textColor = block.textColor || '#ffffff';
+      const align = block.align || 'center';
+      const badgeText = [block.emoji, block.text].filter(Boolean).join(' ');
+      return `
+<!-- ====== BLOCK ${index}: BADGE ====== -->
+<tr>
+<td align="${align}" style="${surface}padding:${padding};" data-block-id="${block.id}" data-editor-field="${prefix}">
+  <table role="presentation" align="${align}" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+  <td bgcolor="${bgColor}" style="padding:6px 16px;border-radius:100px;">
+    <span style="color:${textColor};font-weight:800;font-size:12px;letter-spacing:1px;text-transform:uppercase;font-family:'${bodyFont}',Arial,sans-serif;">${badgeText}</span>
+  </td>
+  </tr>
+  </table>
+</td>
+</tr>`;
+    }
+
+    case 'callout': {
+      if (!block.emoji && !block.title && !block.body) return '';
+      const calloutAccent = block.accentColor || accent;
+      const calloutBg = block.bgColor || lightenColor(calloutAccent, 85);
+      const titleHtml = block.title
+        ? `<p style="margin:0${block.body ? ' 0 6px' : ''};font-family:'${headingFont}',Arial,sans-serif;font-size:16px;line-height:1.35;font-weight:800;color:${primary};">${block.title}</p>`
+        : '';
+      const bodyHtml = block.body
+        ? `<p style="margin:0;font-family:'${bodyFont}',Arial,sans-serif;font-size:15px;line-height:1.55;color:${bodyColor};">${block.body}</p>`
+        : '';
+      const contentHtml = block.emoji
+        ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+      <td width="38" style="padding:0 12px 0 0;vertical-align:top;font-family:Arial,sans-serif;font-size:26px;line-height:1.2;">${block.emoji}</td>
+      <td style="vertical-align:top;">${titleHtml}${bodyHtml}</td>
+    </tr>
+    </table>`
+        : `${titleHtml}${bodyHtml}`;
+      return `
+<!-- ====== BLOCK ${index}: CALLOUT ====== -->
+<tr>
+<td style="${surface}padding:${padding};" data-block-id="${block.id}" data-editor-field="${prefix}">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:2px solid ${lightenColor(calloutAccent, 75)};border-radius:12px;overflow:hidden;">
+  <tr>
+    <td width="4" bgcolor="${calloutAccent}" style="width:4px;background-color:${calloutAccent};font-size:0;line-height:0;">&nbsp;</td>
+    <td bgcolor="${calloutBg}" style="background:${calloutBg};padding:16px 20px;">${contentHtml}</td>
+  </tr>
+  </table>
+</td>
+</tr>`;
+    }
+
     case 'divider': {
+      const color = block.color || '#e5eaf0';
+      const thickness = block.thickness ?? 1;
+      const lineStyle = block.lineStyle || 'solid';
+      const border = `${thickness}px ${lineStyle} ${color}`;
+      const dividerHtml = block.ornament
+        ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+    <td width="50%" style="border-top:${border};font-size:0;line-height:0;">&nbsp;</td>
+    <td align="center" style="padding:0 10px;border:0;color:${color};font-family:${bodyFont},Geneva,sans-serif;font-size:16px;line-height:1;white-space:nowrap;">${block.ornament}</td>
+    <td width="50%" style="border-top:${border};font-size:0;line-height:0;">&nbsp;</td>
+  </tr>
+  </table>`
+        : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:${border};font-size:0;line-height:0;">&nbsp;</td></tr></table>`;
       return `
 <!-- ====== BLOCK ${index}: DIVIDER ====== -->
 <tr>
 <td style="${surface}padding:${padding};" data-block-id="${block.id}" data-editor-field="${prefix}">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px solid #e5eaf0;font-size:0;line-height:0;padding-top:20px;">&nbsp;</td></tr></table>
+  ${dividerHtml}
 </td>
 </tr>`;
     }
@@ -683,7 +806,7 @@ export function renderEmail(brand: Brand, content: EmailContent, _options: Rende
   const footerLogoHtml = renderFooterLogo(brand, footerBg);
   const bulletsHtml = renderBullets(content.bullets || [], accent);
   const infoBoxHtml = renderInfoBox(content, brand);
-  const ctaHtml = renderCTA(content.ctaText, content.ctaUrl, accent, 'ctaText');
+  const ctaHtml = renderCTA(content.ctaText || '', content.ctaUrl || '', accent, 'ctaText');
   const secondaryCtaHtml = content.secondaryCtaText && content.secondaryCtaUrl
     ? renderCTA(content.secondaryCtaText, content.secondaryCtaUrl, primary, 'secondaryCtaText')
     : '';

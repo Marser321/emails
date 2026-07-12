@@ -5,34 +5,27 @@ import {
   BlockConfig,
   CanvasBlockType,
   CANVAS_BLOCK_CATALOG,
+  createDefaultBlock,
   generateBlockId,
   EmailContent,
   Brand,
 } from '@/lib/types';
+import { moveBlock as moveBlockInArray } from '@/lib/email-document';
 import { listAssets, uploadAsset } from '@/lib/assets';
 import { EmailAsset } from '@/lib/types';
 import { Palette } from 'lucide-react';
 import BlockIcon from './BlockIcon';
+import EmojiPicker, { insertEmojiAtFocusedField } from './EmojiPicker';
 import { EMAIL_SAFE_FONTS } from '@/lib/email-safety';
 
-// ============ Default block factories ============
+// ============ Helpers ============
 
-function createDefaultBlock(type: CanvasBlockType): BlockConfig {
-  const id = generateBlockId();
-  switch (type) {
-    case 'header':     return { id, type };
-    case 'hero':       return { id, type, imageUrl: '', alt: '' };
-    case 'text':       return { id, type, label: '', headline: '', body: '' };
-    case 'image-text': return { id, type, imageUrl: '', text: '', imagePosition: 'left' as const };
-    case 'gallery':    return { id, type, images: [], columns: 2 as const };
-    case 'bullets':    return { id, type, bullets: ['', '', ''] };
-    case 'infobox':    return { id, type, eventDate: '', eventTime: '' };
-    case 'quote':      return { id, type, text: '', author: '' };
-    case 'cta':        return { id, type, ctaText: '', ctaUrl: '' };
-    case 'divider':    return { id, type };
-    case 'spacer':     return { id, type, height: 20 };
-    case 'footer':     return { id, type, footerNote: '' };
-  }
+function lightenHexColor(hex: string, percent: number): string {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.min(255, (num >> 16) + Math.round((255 - (num >> 16)) * percent / 100));
+  const g = Math.min(255, ((num >> 8) & 0x00ff) + Math.round((255 - ((num >> 8) & 0x00ff)) * percent / 100));
+  const b = Math.min(255, (num & 0x0000ff) + Math.round((255 - (num & 0x0000ff)) * percent / 100));
+  return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, '0')}`;
 }
 
 // ============ Props ============
@@ -102,10 +95,7 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
 
   const moveBlock = useCallback((fromIdx: number, toIdx: number) => {
     if (fromIdx === toIdx) return;
-    const updated = [...blocks];
-    const [moved] = updated.splice(fromIdx, 1);
-    updated.splice(toIdx, 0, moved);
-    setBlocks(updated);
+    setBlocks(moveBlockInArray(blocks, fromIdx, toIdx));
   }, [blocks, setBlocks]);
 
   const duplicateBlock = useCallback((id: string) => {
@@ -218,9 +208,12 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
       );
     }
 
-    const fieldGroup = (label: string, children: React.ReactNode) => (
+    const fieldGroup = (label: string, children: React.ReactNode, withEmoji = false) => (
       <div style={{ marginBottom: 10 }}>
-        <label style={labelStyle}>{label}</label>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <label style={labelStyle}>{label}</label>
+          {withEmoji ? <EmojiPicker onSelect={insertEmojiAtFocusedField} /> : null}
+        </div>
         {children}
       </div>
     );
@@ -274,9 +267,9 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
       case 'text':
         return (
           <div style={{ padding: '8px 0' }}>
-            {fieldGroup('Etiqueta', <input className="form-input" value={activeBlock.label || ''} onChange={e => updateBlock(activeBlock.id, { label: e.target.value })} placeholder="MASTERCLASS" />)}
-            {fieldGroup('Título', <input className="form-input" value={activeBlock.headline || ''} onChange={e => updateBlock(activeBlock.id, { headline: e.target.value })} placeholder="Gran título" />)}
-            {fieldGroup('Cuerpo', <textarea className="form-input" style={{ minHeight: 80, resize: 'vertical' }} value={activeBlock.body || ''} onChange={e => updateBlock(activeBlock.id, { body: e.target.value })} placeholder="Texto del cuerpo..." />)}
+            {fieldGroup('Etiqueta', <input className="form-input" value={activeBlock.label || ''} onChange={e => updateBlock(activeBlock.id, { label: e.target.value })} placeholder="MASTERCLASS" />, true)}
+            {fieldGroup('Título', <input className="form-input" value={activeBlock.headline || ''} onChange={e => updateBlock(activeBlock.id, { headline: e.target.value })} placeholder="Gran título" />, true)}
+            {fieldGroup('Cuerpo', <textarea className="form-input" style={{ minHeight: 80, resize: 'vertical' }} value={activeBlock.body || ''} onChange={e => updateBlock(activeBlock.id, { body: e.target.value })} placeholder="Texto del cuerpo..." />, true)}
           </div>
         );
 
@@ -284,8 +277,8 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
         return (
           <div style={{ padding: '8px 0' }}>
             {fieldGroup('URL de Imagen', <input className="form-input" value={activeBlock.imageUrl} onChange={e => updateBlock(activeBlock.id, { imageUrl: e.target.value })} placeholder="https://..." />)}
-            {fieldGroup('Título', <input className="form-input" value={activeBlock.title || ''} onChange={e => updateBlock(activeBlock.id, { title: e.target.value })} />)}
-            {fieldGroup('Texto', <textarea className="form-input" style={{ minHeight: 60, resize: 'vertical' }} value={activeBlock.text} onChange={e => updateBlock(activeBlock.id, { text: e.target.value })} />)}
+            {fieldGroup('Título', <input className="form-input" value={activeBlock.title || ''} onChange={e => updateBlock(activeBlock.id, { title: e.target.value })} />, true)}
+            {fieldGroup('Texto', <textarea className="form-input" style={{ minHeight: 60, resize: 'vertical' }} value={activeBlock.text} onChange={e => updateBlock(activeBlock.id, { text: e.target.value })} />, true)}
             {fieldGroup('Posición Imagen',
               <div style={{ display: 'flex', gap: 8 }}>
                 {(['left', 'right'] as const).map(pos => (
@@ -339,7 +332,8 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
       case 'bullets':
         return (
           <div style={{ padding: '8px 0' }}>
-            {fieldGroup('Título Bullets', <input className="form-input" value={activeBlock.bulletsTitle || ''} onChange={e => updateBlock(activeBlock.id, { bulletsTitle: e.target.value })} placeholder="Lo que vas a aprender" />)}
+            {fieldGroup('Título Bullets', <input className="form-input" value={activeBlock.bulletsTitle || ''} onChange={e => updateBlock(activeBlock.id, { bulletsTitle: e.target.value })} placeholder="Lo que vas a aprender" />, true)}
+            {fieldGroup('Marcador general', <input className="form-input" value={activeBlock.marker || ''} onChange={e => updateBlock(activeBlock.id, { marker: e.target.value })} placeholder="•  ✅  ›" />, true)}
             {activeBlock.bullets.map((b, i) => (
               <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
                 <input className="form-input" style={{ flex: 1 }} value={b} onChange={e => {
@@ -347,6 +341,7 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
                   newBullets[i] = e.target.value;
                   updateBlock(activeBlock.id, { bullets: newBullets });
                 }} placeholder={`Bullet ${i + 1}`} />
+                <EmojiPicker onSelect={insertEmojiAtFocusedField} label={`Insertar emoji en bullet ${i + 1}`} />
                 <button type="button" onClick={() => {
                   const newBullets = activeBlock.bullets.filter((_, j) => j !== i);
                   updateBlock(activeBlock.id, { bullets: newBullets });
@@ -384,15 +379,96 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
             {fieldGroup('Pre-CTA (opcional)', <input className="form-input" value={activeBlock.preCta || ''} onChange={e => updateBlock(activeBlock.id, { preCta: e.target.value })} placeholder="¿Listo para comenzar?" />)}
             {fieldGroup('CTA Secundario (texto)', <input className="form-input" value={activeBlock.secondaryCtaText || ''} onChange={e => updateBlock(activeBlock.id, { secondaryCtaText: e.target.value })} />)}
             {fieldGroup('CTA Secundario (url)', <input className="form-input" value={activeBlock.secondaryCtaUrl || ''} onChange={e => updateBlock(activeBlock.id, { secondaryCtaUrl: e.target.value })} />)}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+              <label style={labelStyle}>Fondo del botón<input type="color" value={activeBlock.ctaBgColor || content.accentColor || brand?.colors.accent || '#2979b8'} onChange={e => updateBlock(activeBlock.id, { ctaBgColor: e.target.value })} style={{ display: 'block', width: '100%', height: 34, marginTop: 5 }} /></label>
+              <label style={labelStyle}>Texto del botón<input type="color" value={activeBlock.ctaTextColor || '#ffffff'} onChange={e => updateBlock(activeBlock.id, { ctaTextColor: e.target.value })} style={{ display: 'block', width: '100%', height: 34, marginTop: 5 }} /></label>
+            </div>
+            {styleSlider('Radio del botón', activeBlock.ctaRadius ?? 8, 0, 28, 'px', v => updateBlock(activeBlock.id, { ctaRadius: v }))}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', marginBottom: 10 }}>
+              <input type="checkbox" checked={activeBlock.ctaFullWidth || false} onChange={e => updateBlock(activeBlock.id, { ctaFullWidth: e.target.checked })} />
+              Botón a ancho completo
+            </label>
+            {fieldGroup('Tamaño',
+              <select className="form-select" value={activeBlock.ctaSize || 'md'} onChange={e => updateBlock(activeBlock.id, { ctaSize: e.target.value as 'sm' | 'md' | 'lg' })}>
+                <option value="sm">Pequeño</option>
+                <option value="md">Mediano</option>
+                <option value="lg">Grande</option>
+              </select>
+            )}
           </div>
         );
+
+      case 'band':
+        return (
+          <div style={{ padding: '8px 0' }}>
+            {fieldGroup('Texto (opcional)', <input className="form-input" value={activeBlock.text || ''} onChange={e => updateBlock(activeBlock.id, { text: e.target.value })} placeholder="ENVÍO GRATIS HOY" />)}
+            {fieldGroup('Emoji (opcional)', <input className="form-input" value={activeBlock.emoji || ''} onChange={e => updateBlock(activeBlock.id, { emoji: e.target.value })} placeholder="🎁" />)}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+              <label style={labelStyle}>Color de fondo<input type="color" value={activeBlock.bgColor || '#29abe2'} onChange={e => updateBlock(activeBlock.id, { bgColor: e.target.value })} style={{ display: 'block', width: '100%', height: 34, marginTop: 5 }} /></label>
+              <label style={labelStyle}>Color de texto<input type="color" value={activeBlock.textColor || '#ffffff'} onChange={e => updateBlock(activeBlock.id, { textColor: e.target.value })} style={{ display: 'block', width: '100%', height: 34, marginTop: 5 }} /></label>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', marginBottom: 10 }}>
+              <input type="checkbox" checked={activeBlock.useGradient || false} onChange={e => updateBlock(activeBlock.id, { useGradient: e.target.checked })} />
+              Usar gradiente
+            </label>
+            {activeBlock.useGradient && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                <label style={labelStyle}>Inicio<input type="color" value={activeBlock.gradientStart || '#29abe2'} onChange={e => updateBlock(activeBlock.id, { gradientStart: e.target.value })} style={{ display: 'block', width: '100%', height: 34, marginTop: 5 }} /></label>
+                <label style={labelStyle}>Fin<input type="color" value={activeBlock.gradientEnd || '#1b6fc4'} onChange={e => updateBlock(activeBlock.id, { gradientEnd: e.target.value })} style={{ display: 'block', width: '100%', height: 34, marginTop: 5 }} /></label>
+              </div>
+            )}
+            {styleSlider('Altura sin texto', activeBlock.height ?? 20, 4, 80, 'px', v => updateBlock(activeBlock.id, { height: v }))}
+          </div>
+        );
+
+      case 'badge':
+        return (
+          <div style={{ padding: '8px 0' }}>
+            {fieldGroup('Texto', <input className="form-input" value={activeBlock.text} onChange={e => updateBlock(activeBlock.id, { text: e.target.value })} placeholder="OFERTA" />)}
+            {fieldGroup('Emoji (opcional)', <input className="form-input" value={activeBlock.emoji || ''} onChange={e => updateBlock(activeBlock.id, { emoji: e.target.value })} placeholder="🔥" />)}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+              <label style={labelStyle}>Color de fondo<input type="color" value={activeBlock.bgColor || content.accentColor || brand?.colors.accent || '#2979b8'} onChange={e => updateBlock(activeBlock.id, { bgColor: e.target.value })} style={{ display: 'block', width: '100%', height: 34, marginTop: 5 }} /></label>
+              <label style={labelStyle}>Color de texto<input type="color" value={activeBlock.textColor || '#ffffff'} onChange={e => updateBlock(activeBlock.id, { textColor: e.target.value })} style={{ display: 'block', width: '100%', height: 34, marginTop: 5 }} /></label>
+            </div>
+            {fieldGroup('Alineación',
+              <select className="form-select" value={activeBlock.align || 'center'} onChange={e => updateBlock(activeBlock.id, { align: e.target.value as 'left' | 'center' | 'right' })}>
+                <option value="left">Izquierda</option>
+                <option value="center">Centro</option>
+                <option value="right">Derecha</option>
+              </select>
+            )}
+          </div>
+        );
+
+      case 'callout': {
+        const defaultAccent = content.accentColor || brand?.colors.accent || '#2979b8';
+        const selectedAccent = activeBlock.accentColor || defaultAccent;
+        return (
+          <div style={{ padding: '8px 0' }}>
+            {fieldGroup('Emoji (opcional)', <input className="form-input" value={activeBlock.emoji || ''} onChange={e => updateBlock(activeBlock.id, { emoji: e.target.value })} placeholder="💡" />)}
+            {fieldGroup('Título', <input className="form-input" value={activeBlock.title || ''} onChange={e => updateBlock(activeBlock.id, { title: e.target.value })} placeholder="Consejo importante" />)}
+            {fieldGroup('Contenido', <textarea className="form-input" style={{ minHeight: 70, resize: 'vertical' }} value={activeBlock.body || ''} onChange={e => updateBlock(activeBlock.id, { body: e.target.value })} placeholder="Texto del aviso, tip o garantía..." />)}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+              <label style={labelStyle}>Color de fondo<input type="color" value={activeBlock.bgColor || lightenHexColor(selectedAccent, 85)} onChange={e => updateBlock(activeBlock.id, { bgColor: e.target.value })} style={{ display: 'block', width: '100%', height: 34, marginTop: 5 }} /></label>
+              <label style={labelStyle}>Color de acento<input type="color" value={selectedAccent} onChange={e => updateBlock(activeBlock.id, { accentColor: e.target.value })} style={{ display: 'block', width: '100%', height: 34, marginTop: 5 }} /></label>
+            </div>
+          </div>
+        );
+      }
 
       case 'divider':
         return (
           <div style={{ padding: '8px 0' }}>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
-              Línea separadora sutil. Sin configuración extra.
-            </p>
+            {fieldGroup('Color de la línea', <input type="color" value={activeBlock.color || '#e5eaf0'} onChange={e => updateBlock(activeBlock.id, { color: e.target.value })} style={{ display: 'block', width: '100%', height: 34 }} />)}
+            {styleSlider('Grosor', activeBlock.thickness ?? 1, 1, 8, 'px', v => updateBlock(activeBlock.id, { thickness: v }))}
+            {fieldGroup('Estilo',
+              <select className="form-select" value={activeBlock.lineStyle || 'solid'} onChange={e => updateBlock(activeBlock.id, { lineStyle: e.target.value as 'solid' | 'dashed' | 'dotted' })}>
+                <option value="solid">Sólido</option>
+                <option value="dashed">Trazos</option>
+                <option value="dotted">Puntos</option>
+              </select>
+            )}
+            {fieldGroup('Ornamento (opcional)', <input className="form-input" value={activeBlock.ornament || ''} onChange={e => updateBlock(activeBlock.id, { ornament: e.target.value })} placeholder="✦  ●  ✂" />)}
           </div>
         );
 

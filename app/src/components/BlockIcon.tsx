@@ -1,6 +1,6 @@
 import {
-  CalendarClock, Columns2, GalleryHorizontal, Image, ListChecks, MousePointerClick,
-  MoveVertical, PanelBottom, PanelTop, Quote, SeparatorHorizontal, TextCursorInput,
+  CalendarClock, Columns2, GalleryHorizontal, Image, Info, ListChecks, MousePointerClick,
+  MoveVertical, PanelBottom, PanelTop, Quote, RectangleHorizontal, SeparatorHorizontal, Tag, TextCursorInput,
   type LucideProps,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
@@ -16,6 +16,9 @@ const icons = {
   infobox: CalendarClock,
   quote: Quote,
   cta: MousePointerClick,
+  band: RectangleHorizontal,
+  badge: Tag,
+  callout: Info,
   divider: SeparatorHorizontal,
   spacer: MoveVertical,
   footer: PanelBottom,
