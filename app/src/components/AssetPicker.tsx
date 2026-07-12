@@ -12,6 +12,7 @@ interface AssetPickerProps {
   onSelect: (asset: AssetSelection) => void;
   onClose: () => void;
   title?: string;
+  initialKind?: EmailAsset['kind'];
 }
 
 const kinds: { value: 'all' | NonNullable<EmailAsset['kind']>; label: string }[] = [
@@ -19,9 +20,9 @@ const kinds: { value: 'all' | NonNullable<EmailAsset['kind']>; label: string }[]
   { value: 'logo', label: 'Logos' }, { value: 'icon', label: 'Iconos' }, { value: 'other', label: 'Otros' },
 ];
 
-export default function AssetPicker({ brandId, onSelect, onClose, title }: AssetPickerProps) {
+export default function AssetPicker({ brandId, onSelect, onClose, title, initialKind }: AssetPickerProps) {
   const [tab, setTab] = useState<'brand' | 'shared'>(brandId && brandId !== '_shared' ? 'brand' : 'shared');
-  const [kind, setKind] = useState<(typeof kinds)[number]['value']>('all');
+  const [kind, setKind] = useState<(typeof kinds)[number]['value']>(initialKind || 'all');
   const [query, setQuery] = useState('');
   const [assets, setAssets] = useState<EmailAsset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,7 +151,7 @@ export default function AssetPicker({ brandId, onSelect, onClose, title }: Asset
 
         <footer className="asset-picker-footer">
           <label><Link2 size={17} /><input value={externalUrl} onChange={event => setExternalUrl(event.target.value)} placeholder="https://… URL externa absoluta" /></label>
-          <button className="btn btn-secondary" disabled={!externalValid} onClick={() => onSelect({ filename: externalUrl.trim(), brandId: '', url: externalUrl.trim(), size: 0, modifiedAt: '', kind: 'other', altText: 'Imagen externa' })}>Usar URL</button>
+          <button className="btn btn-secondary" disabled={!externalValid} onClick={() => onSelect({ filename: externalUrl.trim(), brandId: '', url: externalUrl.trim(), size: 0, modifiedAt: '', kind: initialKind || 'other', altText: 'Imagen externa' })}>Usar URL</button>
         </footer>
 
         {editing && <div className="asset-edit-panel">

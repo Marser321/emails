@@ -50,6 +50,7 @@ for (const definition of definitions) {
     width: definition.width,
     height: definition.height,
     mimeType: 'image/jpeg',
+    hasAlpha: false,
     variant: 'email',
     author: definition.author,
     sourcePrompt: definition.prompt,

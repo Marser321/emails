@@ -39,7 +39,9 @@ export class MissingApiKeyError extends Error {
     super(
       engine === 'claude'
         ? 'Anthropic no está configurado en el servidor.'
-        : 'Gemini no está configurado en el servidor.'
+        : engine === 'groq'
+          ? 'Groq no está configurado en el servidor.'
+          : 'Gemini no está configurado en el servidor.'
     );
     this.name = 'MissingApiKeyError';
   }
@@ -57,6 +59,10 @@ export async function getProvider(requested?: AIEngine): Promise<AIProvider> {
   if (engine === 'claude') {
     const { ClaudeProvider } = await import('./providers/claude');
     return new ClaudeProvider(apiKey);
+  }
+  if (engine === 'groq') {
+    const { GroqProvider } = await import('./providers/groq');
+    return new GroqProvider(apiKey);
   }
   const { GeminiProvider } = await import('./providers/gemini');
   return new GeminiProvider(apiKey);

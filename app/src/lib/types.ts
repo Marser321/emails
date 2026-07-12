@@ -1,7 +1,7 @@
 // Types for the Email Builder app
 
 // Motor de IA disponible para generación de textos
-export type AIEngine = 'gemini' | 'claude';
+export type AIEngine = 'gemini' | 'groq' | 'claude';
 
 // Voz y estilo de la marca — alimenta los prompts de IA (todos opcionales)
 export interface BrandVoice {
@@ -525,6 +525,7 @@ export interface EmailAsset {
   width: number;
   height: number;
   mimeType: string;
+  hasAlpha: boolean;
   variant: 'email' | 'thumbnail' | 'source';
   createdBy?: string;
   thumbnailUrl?: string;

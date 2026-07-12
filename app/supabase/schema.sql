@@ -44,12 +44,8 @@ alter table public.history add column if not exists created_by uuid references a
 
 -- Sin esto, cualquier insert directo a la tabla (fuera de la API/Zod de la app)
 -- puede colar un motor inválido, ej. engine='manual' — ya pasó dos veces.
-do $$
-begin
-  if not exists (select 1 from pg_constraint where conname = 'history_engine_check') then
-    alter table public.history add constraint history_engine_check check (engine in ('gemini', 'claude'));
-  end if;
-end $$;
+alter table public.history drop constraint if exists history_engine_check;
+alter table public.history add constraint history_engine_check check (engine in ('gemini', 'groq', 'claude'));
 
 create table if not exists public.drafts (
   id text primary key,
@@ -70,7 +66,7 @@ alter table public.drafts add column if not exists created_by uuid references au
 
 create table if not exists public.settings (
   id text primary key default 'default',
-  default_engine text not null default 'gemini' check (default_engine in ('gemini', 'claude')),
+  default_engine text not null default 'gemini' check (default_engine in ('gemini', 'groq', 'claude')),
   assets_public_base_url text,
   migrated_from_local_storage boolean not null default true,
   updated_at timestamptz not null default now()
@@ -79,6 +75,9 @@ create table if not exists public.settings (
 -- Secrets belong in deployment environment variables, never in database rows.
 alter table public.settings drop column if exists gemini_api_key;
 alter table public.settings drop column if exists anthropic_api_key;
+alter table public.settings drop column if exists groq_api_key;
+alter table public.settings drop constraint if exists settings_default_engine_check;
+alter table public.settings add constraint settings_default_engine_check check (default_engine in ('gemini', 'groq', 'claude'));
 insert into public.settings (id, default_engine) values ('default', 'gemini') on conflict (id) do nothing;
 
 create table if not exists public.assets (
@@ -92,6 +91,7 @@ create table if not exists public.assets (
   width integer not null check (width > 0),
   height integer not null check (height > 0),
   mime_type text not null check (mime_type in ('image/jpeg', 'image/png', 'image/webp', 'image/gif')),
+  has_alpha boolean not null default false,
   byte_size bigint not null check (byte_size > 0 and byte_size <= 8388608),
   variant text not null default 'email' check (variant in ('email', 'thumbnail', 'source')),
   author text not null default 'AD Media Solution',
@@ -101,6 +101,8 @@ create table if not exists public.assets (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.assets add column if not exists has_alpha boolean not null default false;
 
 create index if not exists history_brand_created_idx on public.history (brand_id, created_at desc);
 create index if not exists history_rating_idx on public.history (brand_id, rating) where rating is not null;

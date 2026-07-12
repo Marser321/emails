@@ -1,6 +1,7 @@
 import { AIEngine, AppSettings } from '@/lib/types';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { isSupabaseConfigured } from './env';
+import { providerApiKey } from './provider-registry';
 
 const DEFAULT_SETTINGS: AppSettings = { defaultEngine: 'gemini' };
 
@@ -42,7 +43,7 @@ export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSett
 }
 
 export async function resolveApiKey(engine: AIEngine): Promise<string | undefined> {
-  return engine === 'claude' ? process.env.ANTHROPIC_API_KEY : process.env.GEMINI_API_KEY;
+  return providerApiKey(engine);
 }
 
 export function maskKey(key: string | undefined): string {

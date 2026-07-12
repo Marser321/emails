@@ -21,6 +21,7 @@ describe('API schemas', () => {
 
   it('refuses attempts to store provider secrets', () => {
     expect(settingsPatchSchema.safeParse({ defaultEngine: 'gemini' }).success).toBe(true);
+    expect(settingsPatchSchema.safeParse({ defaultEngine: 'groq' }).success).toBe(true);
     expect(settingsPatchSchema.safeParse({ geminiApiKey: 'secret' }).success).toBe(false);
   });
 

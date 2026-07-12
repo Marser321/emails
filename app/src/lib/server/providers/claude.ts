@@ -3,6 +3,7 @@
 // sin prefill de assistant; JSON garantizado vía output_config.format.
 import Anthropic from '@anthropic-ai/sdk';
 import { EmailContent } from '@/lib/types';
+import { AI_ENGINE_META } from '@/lib/ai-engines';
 import {
   AbTestParams,
   AbTestResult,
@@ -21,8 +22,9 @@ import {
   cleanPlainText,
   GENERATE_JSON_SCHEMA,
 } from '../prompts';
+import { parseAbTestResult, parseGeneratedContent } from '../provider-output';
 
-const MODEL = 'claude-sonnet-5';
+const MODEL = AI_ENGINE_META.claude.defaultModel;
 
 function extractText(response: Anthropic.Message): string {
   for (const block of response.content) {
@@ -63,7 +65,7 @@ export class ClaudeProvider implements AIProvider {
         output_config: { format: { type: 'json_schema', schema: GENERATE_JSON_SCHEMA } },
         messages: [{ role: 'user', content: buildGenerateUserPrompt(p.prompt, p.templateType, p.brand) }],
       });
-      return JSON.parse(extractText(response));
+      return parseGeneratedContent(extractText(response));
     } catch (error) {
       throw mapError(error);
     }
@@ -94,7 +96,7 @@ export class ClaudeProvider implements AIProvider {
         output_config: { format: { type: 'json_schema', schema: ABTEST_JSON_SCHEMA } },
         messages: [{ role: 'user', content: buildAbUserPrompt(p.headline, p.body) }],
       });
-      return JSON.parse(extractText(response));
+      return parseAbTestResult(extractText(response));
     } catch (error) {
       throw mapError(error);
     }

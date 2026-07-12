@@ -12,6 +12,7 @@ import EmailHistoryCard from '@/components/EmailHistoryCard';
 import EmojiPicker, { insertEmojiAtFocusedField } from '@/components/EmojiPicker';
 import { getAllBrands, updateBrand } from '@/lib/brands';
 import { collectLocalAssetUrls } from '@/lib/export';
+import { AI_ENGINES, AI_ENGINE_META } from '@/lib/ai-engines';
 import { analyzeEmailHtml, listEmailIssues } from '@/lib/email-checks';
 import { renderEmail } from '@/lib/templates';
 import { ensureContentBlocks, insertBlockInOrder, moveBlock as moveBlockInArray, documentToContent, prepareContentForSave } from '@/lib/email-document';
@@ -32,16 +33,12 @@ const LAYOUT_OPTIONS: { id: LayoutVariant; name: string; icon: string; descripti
 
 interface PublicSettings {
   hasGeminiKey: boolean;
+  hasGroqKey: boolean;
   hasAnthropicKey: boolean;
   defaultEngine: AIEngine;
   assetsPublicBaseUrl: string;
   supabaseAssetsBaseUrl: string;
 }
-
-const ENGINE_LABELS: Record<AIEngine, string> = {
-  gemini: '⚡ Gemini',
-  claude: '🧠 Claude',
-};
 
 // D3: un email nuevo solo trae campos top-level (tema/layout); el contenido vive
 // en content.blocks[] (ensureContentBlocks lo puebla con header+footer). Los
@@ -128,6 +125,8 @@ function EditorContent() {
   const [selectedEngine, setSelectedEngine] = useState<AIEngine>('gemini');
   // Última generación: para rating 👍/👎 y snapshot del HTML usado
   const [lastHistory, setLastHistory] = useState<{ id: string; brandId: string; rating: 'up' | 'down' | null } | null>(null);
+  const [historySaveState, setHistorySaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const historySaveAbortRef = useRef<AbortController | null>(null);
 
   // Bloques & Layout: destino del AssetPicker ('hero' | 'imageText' | 'gallery-<i>')
   const [assetPickerTarget, setAssetPickerTarget] = useState<string | null>(null);
@@ -538,6 +537,7 @@ function EditorContent() {
     // Inject click listener into iframe
     const interactionScript = `
           <script>
+            (() => {
             document.addEventListener('click', function(e) {
               let target = e.target;
               while (target && target !== document.body) {
@@ -554,8 +554,8 @@ function EditorContent() {
               }
             });
             // Highlight hover style
-            const style = document.createElement('style');
-            style.textContent = \`
+            const interactionStyle = document.createElement('style');
+            interactionStyle.textContent = \`
               [data-editor-field] {
                 cursor: pointer !important;
                 transition: outline 0.2s ease !important;
@@ -565,7 +565,8 @@ function EditorContent() {
                 outline-offset: 4px !important;
               }
             \`;
-            document.head.appendChild(style);
+            document.head.appendChild(interactionStyle);
+            })();
           </script>
         `;
     let interactiveHtml = html.replace('</body>', `${interactionScript}</body>`);
@@ -847,7 +848,11 @@ function EditorContent() {
 
   // AI Prompt actions
   const hasKeyForEngine = (engine: AIEngine) =>
-    engine === 'claude' ? Boolean(settings?.hasAnthropicKey) : Boolean(settings?.hasGeminiKey);
+    engine === 'claude'
+      ? Boolean(settings?.hasAnthropicKey)
+      : engine === 'groq'
+        ? Boolean(settings?.hasGroqKey)
+        : Boolean(settings?.hasGeminiKey);
 
   const handleOpenAiModal = () => {
     if (!hasKeyForEngine(selectedEngine)) {
@@ -890,23 +895,45 @@ function EditorContent() {
   };
 
   // Sincroniza el snapshot HTML final (con ediciones manuales) al historial
-  const syncHistorySnapshot = async () => {
+  const syncHistorySnapshot = useCallback(async () => {
     if (!lastHistory) return;
+    historySaveAbortRef.current?.abort();
+    const controller = new AbortController();
+    historySaveAbortRef.current = controller;
+    setHistorySaveState('saving');
     try {
-      await fetch(`/api/history/${lastHistory.id}`, {
+      const headline = findBlock(content.blocks || [], 'text')?.headline;
+      const response = await fetch(`/api/history/${lastHistory.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           brandId: lastHistory.brandId,
           htmlSnapshot: htmlOutput,
-          subject: content.subject || readBlockField('headline') || content.headline,
+          subject: content.subject || headline || content.headline,
           content: prepareContentForSave(content),
         }),
       });
-    } catch {
-      // best-effort: no bloquear el copiado
+      if (!response.ok) throw new Error('No se pudo guardar el historial');
+      const updated = await response.json() as EmailHistoryEntry;
+      setBrandEmails(prev => prev.map(entry => entry.id === updated.id ? updated : entry));
+      setHistorySaveState('saved');
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      setHistorySaveState('error');
     }
-  };
+  }, [content, htmlOutput, lastHistory]);
+
+  // Autosave de la entrada generada/abierta. Los duplicados mantienen lastHistory=null
+  // para no sobrescribir el registro original.
+  useEffect(() => {
+    if (!lastHistory || !mounted) {
+      setHistorySaveState('idle');
+      return;
+    }
+    const timer = window.setTimeout(() => { void syncHistorySnapshot(); }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [content, htmlOutput, lastHistory, mounted, syncHistorySnapshot]);
 
   const handleGenerateWithAi = async () => {
     if (!aiPrompt.trim()) return;
@@ -935,7 +962,7 @@ function EditorContent() {
         throw new Error(data.error || 'Error al generar el copy con IA.');
       }
 
-      const { historyId, engine: usedEngine, document } = data;
+      const { historyId, historyEntry, historyWarning, engine: usedEngine, document } = data;
 
       // D2: /api/generate devuelve un EmailDocumentV4; su copy vive en document.blocks[].
       // Convertimos a EmailContent y adoptamos los bloques + asunto/preheader
@@ -954,11 +981,17 @@ function EditorContent() {
 
       if (historyId) {
         setLastHistory({ id: historyId, brandId: selectedBrandId, rating: null });
+        if (historyEntry) {
+          setBrandEmails(prev => [historyEntry as EmailHistoryEntry, ...prev.filter(entry => entry.id !== historyEntry.id)]);
+        }
       }
 
       setAiPromptModalOpen(false);
       setAiPrompt('');
-      showToast(`🤖 Email generado con ${ENGINE_LABELS[usedEngine as AIEngine] || usedEngine}`);
+      showToast(
+        historyWarning || `🤖 Email generado con ${AI_ENGINE_META[usedEngine as AIEngine]?.label || usedEngine}`,
+        historyWarning ? 'error' : 'success',
+      );
     } catch (err) {
       showToast((err instanceof Error ? err.message : null) || 'Error al comunicarse con la IA', 'error');
     } finally {
@@ -2534,6 +2567,9 @@ function EditorContent() {
                     {/* Undo / Redo */}
                     <div style={{ display: 'flex', gap: 6 }}>
                       <span className="history-indicator" title="Cambios guardados en esta sesión">{Math.max(0, historyIndex + 1)} cambios</span>
+                      {lastHistory && <span className="history-indicator" role="status" title="Estado del historial remoto">
+                        {historySaveState === 'saving' ? 'Guardando…' : historySaveState === 'error' ? 'Error al guardar' : historySaveState === 'saved' ? 'Guardado' : 'Historial activo'}
+                      </span>}
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm"
@@ -2748,6 +2784,12 @@ function EditorContent() {
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{AI_ENGINE_META.groq.label}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: settings?.hasGroqKey ? '#34d399' : '#f87171' }}>
+                        {settings?.hasGroqKey ? '✅ Configurada' : '❌ No configurada'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
                       <span style={{ fontSize: 13, fontWeight: 600 }}>🧠 Claude</span>
                       <span style={{ fontSize: 12, fontWeight: 600, color: settings?.hasAnthropicKey ? '#34d399' : '#f87171' }}>
                         {settings?.hasAnthropicKey ? '✅ Configurada' : '❌ No configurada'}
@@ -2755,20 +2797,20 @@ function EditorContent() {
                     </div>
                   </div>
 
-                  {(settings?.hasGeminiKey || settings?.hasAnthropicKey) && (
+                  {(settings?.hasGeminiKey || settings?.hasGroqKey || settings?.hasAnthropicKey) && (
                     <div className="form-group" style={{ margin: 0 }}>
                       <label className="form-label">Motor por defecto</label>
                       <div className="pill-tabs">
-                        {(['gemini', 'claude'] as AIEngine[]).map(engine => (
+                        {AI_ENGINES.map(engine => (
                           <button
                             key={engine}
                             type="button"
                             className={`pill-tab ${selectedEngine === engine ? 'active' : ''}`}
                             onClick={() => handleChangeDefaultEngine(engine)}
-                            disabled={engine === 'gemini' ? !settings?.hasGeminiKey : !settings?.hasAnthropicKey}
+                            disabled={!hasKeyForEngine(engine)}
                             style={{ fontSize: 12 }}
                           >
-                            {ENGINE_LABELS[engine]}
+                            {AI_ENGINE_META[engine].label}
                           </button>
                         ))}
                       </div>
@@ -2776,7 +2818,7 @@ function EditorContent() {
                   )}
 
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', background: 'rgba(99, 102, 241, 0.05)', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-accent)', lineHeight: 1.5 }}>
-                    Las API keys ya no se cargan desde acá — las configura quien administra el proyecto como variable de entorno (<code>GEMINI_API_KEY</code> / <code>ANTHROPIC_API_KEY</code>) en Vercel o en <code>.env.local</code> para uso en tu computadora. Si falta alguna, avisale al admin.
+                    Las API keys se configuran como variables de entorno server-only (<code>GEMINI_API_KEY</code>, <code>GROQ_API_KEY</code> o <code>ANTHROPIC_API_KEY</code>) en Vercel o en <code>.env.local</code>. La app nunca muestra sus valores.
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -2805,7 +2847,7 @@ function EditorContent() {
                   <div className="form-group">
                     <label className="form-label">Motor de IA</label>
                     <div className="pill-tabs" style={{ maxWidth: 300 }}>
-                      {(['gemini', 'claude'] as AIEngine[]).map(engine => (
+                      {AI_ENGINES.map(engine => (
                         <button
                           key={engine}
                           type="button"
@@ -2815,13 +2857,13 @@ function EditorContent() {
                           title={hasKeyForEngine(engine) ? undefined : 'Falta configurar la API key de este motor'}
                           style={{ fontSize: 12, opacity: hasKeyForEngine(engine) ? 1 : 0.5 }}
                         >
-                          {ENGINE_LABELS[engine]}
+                          {AI_ENGINE_META[engine].label}
                         </button>
                       ))}
                     </div>
                     {!hasKeyForEngine(selectedEngine) && (
                       <div style={{ fontSize: 11, color: '#fbbf24', marginTop: 6 }}>
-                        ⚠️ Falta la API key de {ENGINE_LABELS[selectedEngine]} — configúrala en «Configurar IA».
+                        ⚠️ Falta la API key de {AI_ENGINE_META[selectedEngine].shortLabel} — configúrala en el servidor.
                       </div>
                     )}
                   </div>
@@ -2841,7 +2883,7 @@ function EditorContent() {
                   {generatingCopy && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--text-accent)', fontSize: 14, fontWeight: 600, marginTop: 16, background: 'rgba(99, 102, 241, 0.05)', padding: '12px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-accent)', animation: 'pulse 1.5s infinite' }}>
                       <div style={{ width: 18, height: 18, border: '2.5px solid transparent', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} aria-hidden="true"></div>
-                      Escribiendo copy persuasivo con {ENGINE_LABELS[selectedEngine]}…
+                      Escribiendo copy persuasivo con {AI_ENGINE_META[selectedEngine].label}…
                       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                     </div>
                   )}

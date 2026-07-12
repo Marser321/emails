@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowUpRight, Inbox, Mail, Plus, Search, ThumbsUp } from 'lucide-react';
@@ -11,6 +11,18 @@ import { getAllBrands } from '@/lib/brands';
 import { Brand, EmailHistoryEntry } from '@/lib/types';
 import { TEMPLATE_PRESETS } from '@/lib/template-presets';
 import { useHydrated } from '@/hooks/useHydrated';
+
+async function fetchHistoryEntries(query: string, brandId: string): Promise<EmailHistoryEntry[]> {
+  const params = new URLSearchParams({ limit: brandId ? '50' : '10' });
+  if (query) params.set('q', query);
+  if (brandId) params.set('brandId', brandId);
+  const response = await fetch(`/api/history?${params}`);
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.error || `Error ${response.status} al cargar el historial`);
+  }
+  return response.json();
+}
 
 export default function Dashboard() {
   const [brandCount, setBrandCount] = useState(0);
@@ -30,24 +42,12 @@ export default function Dashboard() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const loadHistory = (query: string, brandId: string) => {
+  const loadHistory = useCallback((query: string, brandId: string) => {
     setHistoryLoading(true);
     // Sin filtro de marca: solo los 10 más recientes de todo el workspace.
     // Con una marca elegida, subimos el límite para ver el historial completo
     // de esa marca (antes, emails más nuevos de OTRAS marcas tapaban estos).
-    const params = new URLSearchParams({ limit: brandId ? '50' : '10' });
-    if (query) params.set('q', query);
-    if (brandId) params.set('brandId', brandId);
-    fetch(`/api/history?${params}`)
-      .then(async res => {
-        if (!res.ok) {
-          // Un 500/401 acá NO es "no hay emails": mostrarlo como error para que
-          // un problema de sesión o permisos no se disfrace de historial vacío.
-          const body = await res.json().catch(() => null);
-          throw new Error(body?.error || `Error ${res.status} al cargar el historial`);
-        }
-        return res.json();
-      })
+    fetchHistoryEntries(query, brandId)
       .then(entries => {
         setHistory(entries);
         setHistoryError(null);
@@ -57,7 +57,7 @@ export default function Dashboard() {
         setHistoryError(e.message);
       })
       .finally(() => setHistoryLoading(false));
-  };
+  }, []);
 
   useEffect(() => {
     getAllBrands()
@@ -66,8 +66,16 @@ export default function Dashboard() {
         setBrandCount(all.length);
       })
       .catch(() => setBrandCount(0));
-    loadHistory('', '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchHistoryEntries('', '')
+      .then(entries => {
+        setHistory(entries);
+        setHistoryError(null);
+      })
+      .catch((error: Error) => {
+        setHistory([]);
+        setHistoryError(error.message);
+      })
+      .finally(() => setHistoryLoading(false));
   }, []);
 
   // Búsqueda con debounce 300ms (el filtro de marca aplica al toque, sin debounce)
@@ -78,8 +86,7 @@ export default function Dashboard() {
     return () => {
       if (searchTimer.current) clearTimeout(searchTimer.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, brandFilter]);
+  }, [brandFilter, loadHistory, mounted, search]);
 
   const brandName = (brandId: string) => brands.find(b => b.id === brandId)?.name || 'Marca';
 
