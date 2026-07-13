@@ -36,6 +36,7 @@ export default function EmailHistoryCard({ entry, brandName, onRated, onToast, b
   const [justCopied, setJustCopied] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [current, setCurrent] = useState(entry);
+  const previewHtml = current.htmlSnapshot || (brand && current.content ? renderEmail(brand, current.content) : '');
   const patchMeta = async (patch: { isPinned?: boolean; isArchived?: boolean }) => {
     const response = await fetch(`/api/history/${current.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ brandId: current.brandId, ...patch }) });
     const updated = await response.json();
@@ -79,7 +80,7 @@ export default function EmailHistoryCard({ entry, brandName, onRated, onToast, b
   return (
     <div className="glass-shell" style={{ padding: 4, width: 300, flexShrink: 0, ...style }}>
       <div className="glass-core" style={{ padding: 12, display: 'flex', gap: 12 }}>
-        <EmailThumbnail html={current.htmlSnapshot} width={90} height={118} />
+        <EmailThumbnail html={previewHtml} width={90} height={118} />
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
             {current.subject || '(sin asunto)'}

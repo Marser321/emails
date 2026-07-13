@@ -1,1 +1,170 @@
-[]
+[
+  {
+    "id": "amo-masterclass-30m-noshow-2026",
+    "brandId": "mr761k2r7u67zwi2n",
+    "templateType": "reminder",
+    "engine": "gemini",
+    "model": "Biblioteca AMO",
+    "prompt": "Recordatorio de masterclass AMO: 30 minutos después de iniciar, solo para no asistentes.",
+    "subject": "Seguimos en vivo: todavía puedes entrar",
+    "content": {
+      "subject": "Seguimos en vivo: todavía puedes entrar",
+      "preheader": "La masterclass ya empezó, pero aún estás a tiempo de sumarte.",
+      "emailWidth": 600,
+      "blocks": [
+        { "id": "amo06-header", "type": "header" },
+        { "id": "amo06-text", "type": "text", "label": "SEGUIMOS EN VIVO · TODAVÍA ESTÁS A TIEMPO", "headline": "Seguimos en vivo: todavía puedes entrar", "body": "{{contact.first_name}}, vi que todavía no has entrado. No pasa nada: la sesión sigue en vivo y aún puedes sumarte. Estamos hablando de cómo construir un perfil de crédito más fuerte desde los fundamentos. Entra ahora y aprovecha lo que queda de la clase." },
+        { "id": "amo06-info", "type": "infobox", "eventDate": "Sábado 18 de julio", "eventTime": "Sesión en vivo en progreso · hora Miami" },
+        { "id": "amo06-cta", "type": "cta", "preCta": "Entra ahora y aprovecha lo que queda de la clase:", "ctaText": "ENTRAR A LA SESIÓN EN VIVO", "ctaUrl": "https://us06web.zoom.us/j/9021021615?pwd=s0awxGcnD2cwI6tJMM7o5PTmYokOB8.1&omn=82040544198" },
+        { "id": "amo06-footer", "type": "footer", "footerNote": "Enviar únicamente a contactos que no se hayan unido al vivo." }
+      ]
+    },
+    "htmlSnapshot": "",
+    "rating": null,
+    "notes": "Masterclass · no asistentes · 30 min después de iniciar",
+    "isPinned": false,
+    "isArchived": false,
+    "createdAt": "2026-07-13T15:05:00.000Z",
+    "updatedAt": "2026-07-13T15:05:00.000Z"
+  },
+  {
+    "id": "amo-masterclass-5m-2026",
+    "brandId": "mr761k2r7u67zwi2n",
+    "templateType": "reminder",
+    "engine": "gemini",
+    "model": "Biblioteca AMO",
+    "prompt": "Recordatorio de masterclass AMO: 5 minutos antes del inicio.",
+    "subject": "Ya casi empezamos — tu acceso está listo",
+    "content": {
+      "subject": "Ya casi empezamos — tu acceso está listo",
+      "preheader": "Faltan 5 minutos. Entra ahora para no perderte el inicio.",
+      "emailWidth": 600,
+      "blocks": [
+        { "id": "amo05-header", "type": "header" },
+        { "id": "amo05-text", "type": "text", "label": "FALTAN 5 MINUTOS · EN VIVO", "headline": "Ya casi empezamos", "body": "{{contact.first_name}}, abre Zoom ahora. Quiero que estés desde el principio para aprovechar cada paso y hacer tus preguntas en vivo." },
+        { "id": "amo05-info", "type": "infobox", "eventDate": "Sábado 18 de julio", "eventTime": "11:00 AM · hora Miami · por Zoom" },
+        { "id": "amo05-cta", "type": "cta", "preCta": "Tu acceso está listo:", "ctaText": "ENTRAR AHORA A ZOOM", "ctaUrl": "https://us06web.zoom.us/j/9021021615?pwd=s0awxGcnD2cwI6tJMM7o5PTmYokOB8.1&omn=82040544198" },
+        { "id": "amo05-footer", "type": "footer", "footerNote": "Nos vemos adentro." }
+      ]
+    },
+    "htmlSnapshot": "",
+    "rating": null,
+    "notes": "Masterclass · recordatorio · 5 min antes",
+    "isPinned": false,
+    "isArchived": false,
+    "createdAt": "2026-07-13T15:04:00.000Z",
+    "updatedAt": "2026-07-13T15:04:00.000Z"
+  },
+  {
+    "id": "amo-masterclass-1h-2026",
+    "brandId": "mr761k2r7u67zwi2n",
+    "templateType": "reminder",
+    "engine": "gemini",
+    "model": "Biblioteca AMO",
+    "prompt": "Recordatorio de masterclass AMO: 1 hora antes del inicio.",
+    "subject": "En 1 hora empezamos: entra con tu reporte a mano",
+    "content": {
+      "subject": "En 1 hora empezamos: entra con tu reporte a mano",
+      "preheader": "Ya casi abrimos la sesión en vivo. Este es tu acceso directo.",
+      "emailWidth": 600,
+      "blocks": [
+        { "id": "amo04-header", "type": "header" },
+        { "id": "amo04-text", "type": "text", "label": "EMPEZAMOS EN 1 HORA", "headline": "En 1 hora empezamos: entra con tu reporte a mano", "body": "{{contact.first_name}}, en una hora abro la sesión. Veremos maneras responsables de fortalecer un perfil de crédito y cómo distinguir entre hábitos útiles, herramientas disponibles y promesas vacías. Busca un lugar tranquilo, ten tus preguntas listas y entra unos minutos antes." },
+        { "id": "amo04-info", "type": "infobox", "eventDate": "Sábado 18 de julio", "eventTime": "11:00 AM · hora Miami · por Zoom" },
+        { "id": "amo04-cta", "type": "cta", "preCta": "Entra ahora y deja la sesión lista:", "ctaText": "ENTRAR A ZOOM", "ctaUrl": "https://us06web.zoom.us/j/9021021615?pwd=s0awxGcnD2cwI6tJMM7o5PTmYokOB8.1&omn=82040544198" },
+        { "id": "amo04-footer", "type": "footer", "footerNote": "Nos vemos adentro." }
+      ]
+    },
+    "htmlSnapshot": "",
+    "rating": null,
+    "notes": "Masterclass · recordatorio · 1 hora antes",
+    "isPinned": false,
+    "isArchived": false,
+    "createdAt": "2026-07-13T15:03:00.000Z",
+    "updatedAt": "2026-07-13T15:03:00.000Z"
+  },
+  {
+    "id": "amo-masterclass-24h-2026",
+    "brandId": "mr761k2r7u67zwi2n",
+    "templateType": "reminder",
+    "engine": "gemini",
+    "model": "Biblioteca AMO",
+    "prompt": "Recordatorio de masterclass AMO: 24 horas antes, con acceso a Zoom y grupo de WhatsApp.",
+    "subject": "Mañana te enseño a leer tu crédito con otros ojos",
+    "content": {
+      "subject": "Mañana te enseño a leer tu crédito con otros ojos",
+      "preheader": "Prepara tu reporte y guarda el acceso a la masterclass de mañana.",
+      "emailWidth": 600,
+      "blocks": [
+        { "id": "amo03-header", "type": "header" },
+        { "id": "amo03-text", "type": "text", "label": "MAÑANA EN VIVO · MASTERCLASS GRATUITA", "headline": "Mañana te enseño a leer tu crédito con otros ojos", "body": "Hola {{contact.first_name}}, mañana nos vemos. Si tienes tu reporte de crédito, tenlo cerca: así podrás conectar lo que te enseño con tu situación real. Hablaremos de historial de pagos, antigüedad de cuentas y opciones como reportar renta o revisar si Experian Boost encaja contigo. No hay una fórmula mágica: hay información, hábitos y pasos que puedes tomar con intención." },
+        { "id": "amo03-info", "type": "infobox", "eventDate": "Mañana · sábado 18 de julio", "eventTime": "11:00 AM · hora Miami · por Zoom" },
+        { "id": "amo03-cta", "type": "cta", "preCta": "Haz clic y deja abierto tu acceso:", "ctaText": "GUARDAR MI ENLACE DE ZOOM", "ctaUrl": "https://us06web.zoom.us/j/9021021615?pwd=s0awxGcnD2cwI6tJMM7o5PTmYokOB8.1&omn=82040544198", "secondaryCtaText": "Unirme al grupo de WhatsApp", "secondaryCtaUrl": "https://chat.whatsapp.com/Ep40snJhRnoDCIhpTPoArS?mode=gi_t" },
+        { "id": "amo03-footer", "type": "footer", "footerNote": "El grupo de WhatsApp acompaña los recordatorios; tu acceso al vivo es por Zoom." }
+      ]
+    },
+    "htmlSnapshot": "",
+    "rating": null,
+    "notes": "Masterclass · recordatorio · 24 horas antes · Zoom + WhatsApp",
+    "isPinned": false,
+    "isArchived": false,
+    "createdAt": "2026-07-13T15:02:00.000Z",
+    "updatedAt": "2026-07-13T15:02:00.000Z"
+  },
+  {
+    "id": "amo-masterclass-2d-2026",
+    "brandId": "mr761k2r7u67zwi2n",
+    "templateType": "reminder",
+    "engine": "gemini",
+    "model": "Biblioteca AMO",
+    "prompt": "Recordatorio de masterclass AMO: 2 días antes, con tip de pagos puntuales.",
+    "subject": "El hábito que puede estar frenando tu puntaje",
+    "content": {
+      "subject": "El hábito que puede estar frenando tu puntaje",
+      "preheader": "Un tip de Mandy antes de vernos este sábado en vivo.",
+      "emailWidth": 600,
+      "blocks": [
+        { "id": "amo02-header", "type": "header" },
+        { "id": "amo02-text", "type": "text", "label": "MASTERCLASS GRATUITA · FALTAN 2 DÍAS", "headline": "El hábito que puede estar frenando tu puntaje", "body": "{{contact.first_name}}, antes de la clase quiero dejarte un tip sencillo: pagar a tiempo tiene muchísimo peso en tu historial. Una sola fecha olvidada puede quedarse en tu reporte; por eso los recordatorios y los pagos automáticos pueden ser aliados. El sábado vamos más allá del tip: veremos cómo revisar tus cuentas, qué señales buscar en tu reporte y qué herramientas pueden ayudarte a construir hábitos financieros más sólidos." },
+        { "id": "amo02-info", "type": "infobox", "eventDate": "Sábado 18 de julio", "eventTime": "11:00 AM · hora Miami · por Zoom" },
+        { "id": "amo02-cta", "type": "cta", "preCta": "Tu lugar en vivo está a un clic:", "ctaText": "ENTRAR A LA MASTERCLASS", "ctaUrl": "https://us06web.zoom.us/j/9021021615?pwd=s0awxGcnD2cwI6tJMM7o5PTmYokOB8.1&omn=82040544198", "secondaryCtaText": "Unirme al grupo de WhatsApp", "secondaryCtaUrl": "https://chat.whatsapp.com/Ep40snJhRnoDCIhpTPoArS?mode=gi_t" },
+        { "id": "amo02-footer", "type": "footer", "footerNote": "Recibe los avisos previos en el grupo oficial de la masterclass." }
+      ]
+    },
+    "htmlSnapshot": "",
+    "rating": null,
+    "notes": "Masterclass · recordatorio · 2 días antes · Zoom + WhatsApp",
+    "isPinned": false,
+    "isArchived": false,
+    "createdAt": "2026-07-13T15:01:00.000Z",
+    "updatedAt": "2026-07-13T15:01:00.000Z"
+  },
+  {
+    "id": "amo-masterclass-3d-2026",
+    "brandId": "mr761k2r7u67zwi2n",
+    "templateType": "masterclass",
+    "engine": "gemini",
+    "model": "Biblioteca AMO",
+    "prompt": "Recordatorio de masterclass AMO: 3 días antes, con tip de utilización de crédito.",
+    "subject": "Tu crédito puede empezar a cambiar con decisiones simples",
+    "content": {
+      "subject": "Tu crédito puede empezar a cambiar con decisiones simples",
+      "preheader": "En 3 días nos vemos en vivo: guarda tu acceso y únete al grupo.",
+      "emailWidth": 600,
+      "blocks": [
+        { "id": "amo01-header", "type": "header" },
+        { "id": "amo01-text", "type": "text", "label": "MASTERCLASS GRATUITA · EN 3 DÍAS", "headline": "Tu crédito puede empezar a cambiar con decisiones simples", "body": "Hola {{contact.first_name}}, soy Mandy. Este sábado voy a enseñarte en vivo cómo entender tu reporte, proteger lo que ya tienes y tomar pasos reales para fortalecer tu perfil de crédito. Un buen punto de partida es revisar la utilización de tus tarjetas: mantenerla baja —idealmente por debajo del 10%— puede ayudar a que tu perfil se vea más saludable. En la masterclass te explico cómo encaja ese hábito dentro de una estrategia completa." },
+        { "id": "amo01-info", "type": "infobox", "eventDate": "Sábado 18 de julio", "eventTime": "11:00 AM · hora Miami · por Zoom" },
+        { "id": "amo01-cta", "type": "cta", "preCta": "Guarda tu acceso ahora para que no se te pase:", "ctaText": "GUARDAR MI ACCESO A ZOOM", "ctaUrl": "https://us06web.zoom.us/j/9021021615?pwd=s0awxGcnD2cwI6tJMM7o5PTmYokOB8.1&omn=82040544198", "secondaryCtaText": "Unirme al grupo de WhatsApp", "secondaryCtaUrl": "https://chat.whatsapp.com/Ep40snJhRnoDCIhpTPoArS?mode=gi_t" },
+        { "id": "amo01-footer", "type": "footer", "footerNote": "El grupo oficial te ayuda a llegar preparada/o; el acceso al vivo es por Zoom." }
+      ]
+    },
+    "htmlSnapshot": "",
+    "rating": null,
+    "notes": "Masterclass · recordatorio · 3 días antes · Zoom + WhatsApp",
+    "isPinned": false,
+    "isArchived": false,
+    "createdAt": "2026-07-13T15:00:00.000Z",
+    "updatedAt": "2026-07-13T15:00:00.000Z"
+  }
+]
