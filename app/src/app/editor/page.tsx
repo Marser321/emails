@@ -10,14 +10,16 @@ import VisualDesignHub from '@/components/VisualDesignHub';
 import ExportModal from '@/components/ExportModal';
 import EmailHistoryCard from '@/components/EmailHistoryCard';
 import EmojiPicker, { insertEmojiAtFocusedField } from '@/components/EmojiPicker';
+import InlineAiMenu, { type AiRefineCommand } from '@/components/InlineAiMenu';
 import { getAllBrands, updateBrand } from '@/lib/brands';
 import { collectLocalAssetUrls } from '@/lib/export';
 import { AI_ENGINES, AI_ENGINE_META } from '@/lib/ai-engines';
+import { createOffer, listOffers } from '@/lib/offers';
 import { analyzeEmailHtml, listEmailIssues } from '@/lib/email-checks';
 import { renderEmail } from '@/lib/templates';
 import { ensureContentBlocks, insertBlockInOrder, moveBlock as moveBlockInArray, documentToContent, prepareContentForSave } from '@/lib/email-document';
 import {
-  AIEngine, Brand, Draft, EmailContent, EmailHistoryEntry, LayoutVariant, TemplateType, TEMPLATES,
+  AIEngine, Brand, CampaignBrief, Draft, EmailContent, EmailHistoryEntry, LayoutVariant, Offer, TemplateType, TEMPLATES,
   BlockConfig, CanvasBlockType, createDefaultBlock, CANVAS_BLOCK_CATALOG,
   BulletsBlockConfig,
 } from '@/lib/types';
@@ -50,6 +52,7 @@ const DEFAULT_CONTENT: EmailContent = {
   headerTextureUrl: '',
   layout: 'classic',
 };
+const EMPTY_BRIEF: CampaignBrief = { goal: '', audience: '', angle: '', keyMessage: '', cta: '', urgency: '', notes: '' };
 
 // Preset textures
 const TEXTURE_PRESETS = [
@@ -123,6 +126,10 @@ function EditorContent() {
   const [generatingCopy, setGeneratingCopy] = useState(false);
   const [settings, setSettings] = useState<PublicSettings | null>(null);
   const [selectedEngine, setSelectedEngine] = useState<AIEngine>('gemini');
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [selectedOfferId, setSelectedOfferId] = useState('');
+  const [campaignBrief, setCampaignBrief] = useState<CampaignBrief>(EMPTY_BRIEF);
+  const [quickOffer, setQuickOffer] = useState({ name: '', value: '', code: '', landingUrl: '', endsAt: '', terms: '' });
   // Última generación: para rating 👍/👎 y snapshot del HTML usado
   const [lastHistory, setLastHistory] = useState<{ id: string; brandId: string; rating: 'up' | 'down' | null } | null>(null);
   const [historySaveState, setHistorySaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -154,6 +161,7 @@ function EditorContent() {
   const [designHubOpen, setDesignHubOpen] = useState(false);
   const [designHubTab, setDesignHubTab] = useState<'colors' | 'banners'>('colors');
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [selectedBlockField, setSelectedBlockField] = useState<string | null>(null);
 
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     brand: true,
@@ -171,6 +179,19 @@ function EditorContent() {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   }, []);
+
+  useEffect(() => {
+    if (!selectedBrandId) { setOffers([]); return; }
+    listOffers(selectedBrandId).then(setOffers).catch(() => setOffers([]));
+  }, [selectedBrandId]);
+
+  const handleQuickOffer = async () => {
+    if (!quickOffer.name.trim()) return;
+    try {
+      const saved = await createOffer({ brandId: selectedBrandId, name: quickOffer.name.trim(), type: 'custom', value: quickOffer.value.trim(), currency: 'USD', code: quickOffer.code.trim() || undefined, endsAt: quickOffer.endsAt ? new Date(`${quickOffer.endsAt}T23:59:59`).toISOString() : undefined, terms: quickOffer.terms.trim(), audience: campaignBrief.audience, urgency: campaignBrief.urgency, landingUrl: quickOffer.landingUrl.trim(), status: 'active' });
+      setOffers(previous => [saved, ...previous]); setSelectedOfferId(saved.id); setCampaignBrief(previous => ({ ...previous, offerId: saved.id })); setQuickOffer({ name: '', value: '', code: '', landingUrl: '', endsAt: '', terms: '' });
+    } catch (error) { showToast(error instanceof Error ? error.message : 'No se pudo crear la oferta', 'error'); }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -310,6 +331,7 @@ function EditorContent() {
         if (typeof event.data.blockId === 'string' && event.data.blockId) {
           if (!event.data.blockId.startsWith('legacy-')) {
             setSelectedBlockId(event.data.blockId);
+            setSelectedBlockField(typeof event.data.field === 'string' ? event.data.field.replace(/^block-\d+-?/, '') : null);
             setActiveTab('canvas');
             return;
           }
@@ -456,7 +478,7 @@ function EditorContent() {
         if (!res.ok) throw new Error('Registro no encontrado');
         return res.json();
       })
-      .then(entry => {
+      .then(async entry => {
         setSelectedBrandId(entry.brandId);
         if (entry.templateType && TEMPLATES.find(t => t.type === entry.templateType)) {
           setSelectedTemplate(entry.templateType);
@@ -464,17 +486,23 @@ function EditorContent() {
         // D1: migrar emails viejos del historial (sin blocks) al abrirlos,
         // sin cambiar su apariencia — legacyContentToBlocks reproduce
         // exactamente lo que renderEmail() ya deriva al renderizar.
-        const loaded: EmailContent = ensureContentBlocks({ ...DEFAULT_CONTENT, ...entry.content });
+        let recovered: EmailContent | undefined;
+        try { const raw = localStorage.getItem(`emailbuilder-recovery:${entry.id}`); const local = raw ? JSON.parse(raw) as { savedAt: string; content: EmailContent } : null; if (local && local.savedAt > entry.updatedAt) recovered = local.content; } catch { /* ignore invalid recovery data */ }
+        const loaded: EmailContent = ensureContentBlocks({ ...DEFAULT_CONTENT, ...(recovered || entry.content) });
         setContent(loaded);
         setHistory([JSON.parse(JSON.stringify(loaded))]);
         setHistoryIndex(0);
         setActiveTab('editor');
         if (isDuplicate) {
-          setLastHistory(null);
-          showToast('📄 Duplicado — al generar o copiar se guardará como email nuevo');
+          const response = await fetch('/api/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ brandId: entry.brandId, templateType: entry.templateType, engine: entry.engine, model: entry.model, prompt: entry.prompt, subject: `${entry.subject} (copia)`, content: prepareContentForSave(loaded), htmlSnapshot: entry.htmlSnapshot, rating: null, notes: entry.notes || '', offerId: entry.offerId, brief: entry.brief }) });
+          if (!response.ok) throw new Error('No se pudo crear la copia');
+          const copy = await response.json() as EmailHistoryEntry;
+          setLastHistory({ id: copy.id, brandId: copy.brandId, rating: null });
+          setBrandEmails(previous => [copy, ...previous]);
+          showToast('📄 Copia independiente creada');
         } else {
           setLastHistory({ id: entry.id, brandId: entry.brandId, rating: entry.rating });
-          showToast('📥 Email cargado desde el historial');
+          showToast(recovered ? 'Recuperamos cambios locales que aún no se habían sincronizado' : '📥 Email cargado desde el historial');
         }
       })
       .catch((e: Error) => {
@@ -656,7 +684,7 @@ function EditorContent() {
     }
     flashFeedback('copyHtml');
     // El HTML copiado es "lo realmente usado" — actualiza el snapshot del historial
-    syncHistorySnapshot();
+    syncHistorySnapshot('exported');
   };
 
   // Campos top-level (asunto, preheader, colores, texturas, layout, showDividers).
@@ -895,7 +923,7 @@ function EditorContent() {
   };
 
   // Sincroniza el snapshot HTML final (con ediciones manuales) al historial
-  const syncHistorySnapshot = useCallback(async () => {
+  const syncHistorySnapshot = useCallback(async (reason: 'autosave' | 'manual' | 'exported' = 'autosave') => {
     if (!lastHistory) return;
     historySaveAbortRef.current?.abort();
     const controller = new AbortController();
@@ -912,12 +940,14 @@ function EditorContent() {
           htmlSnapshot: htmlOutput,
           subject: content.subject || headline || content.headline,
           content: prepareContentForSave(content),
+          versionReason: reason,
         }),
       });
       if (!response.ok) throw new Error('No se pudo guardar el historial');
       const updated = await response.json() as EmailHistoryEntry;
       setBrandEmails(prev => prev.map(entry => entry.id === updated.id ? updated : entry));
       setHistorySaveState('saved');
+      localStorage.removeItem(`emailbuilder-recovery:${lastHistory.id}`);
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return;
       setHistorySaveState('error');
@@ -931,9 +961,14 @@ function EditorContent() {
       setHistorySaveState('idle');
       return;
     }
-    const timer = window.setTimeout(() => { void syncHistorySnapshot(); }, 1200);
+    const timer = window.setTimeout(() => { void syncHistorySnapshot(); }, 2000);
     return () => window.clearTimeout(timer);
   }, [content, htmlOutput, lastHistory, mounted, syncHistorySnapshot]);
+
+  useEffect(() => {
+    if (!mounted || !lastHistory) return;
+    try { localStorage.setItem(`emailbuilder-recovery:${lastHistory.id}`, JSON.stringify({ savedAt: new Date().toISOString(), content: prepareContentForSave(content) })); } catch { /* storage may be unavailable in hardened iframes */ }
+  }, [content, lastHistory, mounted]);
 
   const handleGenerateWithAi = async () => {
     if (!aiPrompt.trim()) return;
@@ -953,6 +988,8 @@ function EditorContent() {
           brand: selectedBrand,
           brandId: selectedBrandId,
           engine: selectedEngine,
+          offerId: selectedOfferId || undefined,
+          brief: { ...campaignBrief, offerId: selectedOfferId || undefined },
         }),
       });
 
@@ -974,6 +1011,7 @@ function EditorContent() {
           subject: generated.subject ?? prev.subject,
           preheader: generated.preheader ?? prev.preheader,
           blocks: generated.blocks ?? prev.blocks,
+          campaignBrief: { ...campaignBrief, offerId: selectedOfferId || undefined },
         });
         saveHistory(next);
         return next;
@@ -1127,7 +1165,7 @@ function EditorContent() {
     URL.revokeObjectURL(url);
     showToast('📥 Archivo HTML descargado');
     flashFeedback('download');
-    syncHistorySnapshot();
+    syncHistorySnapshot('exported');
   };
 
   const handleShareDraft = () => {
@@ -1184,84 +1222,7 @@ function EditorContent() {
     return (
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <EmojiPicker onSelect={insertEmojiAtFocusedField} />
-        {isPending ? (
-          <span style={{ fontSize: 10, color: 'var(--text-accent)', animation: 'pulse 1s infinite' }}>🤖...</span>
-        ) : (
-          <div className="dropdown-container" style={{ position: 'relative' }}>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              style={{ padding: '2px 8px', fontSize: 11, height: 'auto', gap: 4, opacity: 0.7 }}
-              onClick={(e) => {
-                const el = e.currentTarget.nextElementSibling as HTMLElement;
-                if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block';
-              }}
-              onBlur={(e) => {
-                const el = e.currentTarget.nextElementSibling as HTMLElement;
-                setTimeout(() => { if (el) el.style.display = 'none'; }, 200);
-              }}
-            >
-              🤖 IA
-            </button>
-            <div
-              className="glass-shell"
-              style={{
-                display: 'none',
-                position: 'absolute',
-                right: 0,
-                top: '100%',
-                zIndex: 50,
-                width: 140,
-                padding: 4,
-                boxShadow: 'var(--shadow-lg)',
-                marginTop: 4,
-              }}
-            >
-              <div className="glass-core" style={{ padding: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <button
-                  type="button"
-                  className="sidebar-link"
-                  style={{ padding: '6px 8px', fontSize: 11, borderRadius: 'var(--radius-sm)', width: '100%', textAlign: 'left' }}
-                  onMouseDown={() => handleRefineField(field, 'optimize', index)}
-                >
-                  🪄 Optimizar
-                </button>
-                <button
-                  type="button"
-                  className="sidebar-link"
-                  style={{ padding: '6px 8px', fontSize: 11, borderRadius: 'var(--radius-sm)', width: '100%', textAlign: 'left' }}
-                  onMouseDown={() => handleRefineField(field, 'shorten', index)}
-                >
-                  📝 Acortar
-                </button>
-                <button
-                  type="button"
-                  className="sidebar-link"
-                  style={{ padding: '6px 8px', fontSize: 11, borderRadius: 'var(--radius-sm)', width: '100%', textAlign: 'left' }}
-                  onMouseDown={() => handleRefineField(field, 'casual', index)}
-                >
-                  💬 Tono Cercano
-                </button>
-                <button
-                  type="button"
-                  className="sidebar-link"
-                  style={{ padding: '6px 8px', fontSize: 11, borderRadius: 'var(--radius-sm)', width: '100%', textAlign: 'left' }}
-                  onMouseDown={() => handleRefineField(field, 'formal', index)}
-                >
-                  👔 Tono Formal
-                </button>
-                <button
-                  type="button"
-                  className="sidebar-link"
-                  style={{ padding: '6px 8px', fontSize: 11, borderRadius: 'var(--radius-sm)', width: '100%', textAlign: 'left' }}
-                  onMouseDown={() => handleRefineField(field, 'rewrite', index)}
-                >
-                  🎲 Reescribir (otro ángulo)
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <InlineAiMenu pending={isPending} onAction={(command: AiRefineCommand) => handleRefineField(field, command, index)} />
       </div>
     );
   };
@@ -2366,7 +2327,9 @@ function EditorContent() {
                     brand={selectedBrand || null}
                     onContentChange={setBlockValue}
                     selectedBlockId={selectedBlockId}
+                    selectedField={selectedBlockField}
                     onBlockSelect={setSelectedBlockId}
+                    aiEngine={selectedEngine}
                     onOpenDesignHub={(tab) => { setDesignHubTab(tab || 'colors'); setDesignHubOpen(true); }}
                   />
                 )}
@@ -2868,6 +2831,41 @@ function EditorContent() {
                     )}
                   </div>
                   <div className="form-group">
+                    <label className="form-label" htmlFor="campaign-goal">Objetivo y audiencia</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <input id="campaign-goal" className="form-input" value={campaignBrief.goal} onChange={e => setCampaignBrief(previous => ({ ...previous, goal: e.target.value }))} placeholder="Ej: vender, registrar, recordar" />
+                      <input className="form-input" value={campaignBrief.audience} onChange={e => setCampaignBrief(previous => ({ ...previous, audience: e.target.value }))} placeholder="Audiencia principal" />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="campaign-offer">Oferta reutilizable</label>
+                    <select id="campaign-offer" className="form-select" value={selectedOfferId} onChange={e => { setSelectedOfferId(e.target.value); setCampaignBrief(previous => ({ ...previous, offerId: e.target.value || undefined })); }}>
+                      <option value="">Sin oferta</option>
+                      {offers.filter(offer => offer.status !== 'archived').map(offer => <option key={offer.id} value={offer.id}>{offer.name} · {offer.value}</option>)}
+                    </select>
+                    <details style={{ marginTop: 7 }}>
+                      <summary style={{ fontSize: 11, cursor: 'pointer', color: 'var(--text-secondary)', fontWeight: 700 }}>Crear oferta rápida</summary>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 7 }}>
+                        <input className="form-input" value={quickOffer.name} onChange={e => setQuickOffer(previous => ({ ...previous, name: e.target.value }))} placeholder="Nombre de oferta" />
+                        <input className="form-input" value={quickOffer.value} onChange={e => setQuickOffer(previous => ({ ...previous, value: e.target.value }))} placeholder="30% OFF / $99" />
+                        <input className="form-input" value={quickOffer.code} onChange={e => setQuickOffer(previous => ({ ...previous, code: e.target.value }))} placeholder="Código" />
+                        <input className="form-input" value={quickOffer.landingUrl} onChange={e => setQuickOffer(previous => ({ ...previous, landingUrl: e.target.value }))} placeholder="URL destino" />
+                        <input className="form-input" type="date" aria-label="Vigencia de la oferta" value={quickOffer.endsAt} onChange={e => setQuickOffer(previous => ({ ...previous, endsAt: e.target.value }))} />
+                        <input className="form-input" value={quickOffer.terms} onChange={e => setQuickOffer(previous => ({ ...previous, terms: e.target.value }))} placeholder="Condiciones de la oferta" />
+                      </div>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={handleQuickOffer} style={{ marginTop: 7 }}>Guardar oferta</button>
+                    </details>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Dirección creativa</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <input className="form-input" value={campaignBrief.angle} onChange={e => setCampaignBrief(previous => ({ ...previous, angle: e.target.value }))} placeholder="Ángulo o gancho" />
+                      <input className="form-input" value={campaignBrief.cta} onChange={e => setCampaignBrief(previous => ({ ...previous, cta: e.target.value }))} placeholder="CTA deseado" />
+                      <input className="form-input" value={campaignBrief.keyMessage} onChange={e => setCampaignBrief(previous => ({ ...previous, keyMessage: e.target.value }))} placeholder="Mensaje principal" />
+                      <input className="form-input" value={campaignBrief.urgency} onChange={e => setCampaignBrief(previous => ({ ...previous, urgency: e.target.value }))} placeholder="Urgencia / vigencia" />
+                    </div>
+                  </div>
+                  <div className="form-group">
                     <label htmlFor="ai-prompt-input" className="form-label">¿De qué trata este correo?</label>
                     <textarea
                       id="ai-prompt-input"
@@ -2912,7 +2910,7 @@ function EditorContent() {
             onClose={() => setExportMode(null)}
             onDone={message => {
               showToast(message);
-              syncHistorySnapshot();
+              syncHistorySnapshot('exported');
             }}
             onBaseUrlSaved={baseUrl => setSettings(prev => (prev ? { ...prev, assetsPublicBaseUrl: baseUrl } : prev))}
           />
@@ -2937,6 +2935,7 @@ function EditorContent() {
             content={content}
             brandId={selectedBrandId}
             initialTab={designHubTab}
+            offer={offers.find(offer => offer.id === selectedOfferId)}
             onUpdateColors={({ contentColors }) => {
               const updatedContent = {
                 ...content,

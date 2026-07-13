@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   BlockConfig,
   CanvasBlockType,
@@ -9,6 +9,7 @@ import {
   generateBlockId,
   EmailContent,
   Brand,
+  AIEngine,
 } from '@/lib/types';
 import { moveBlock as moveBlockInArray } from '@/lib/email-document';
 import { listAssets, uploadAsset } from '@/lib/assets';
@@ -17,6 +18,7 @@ import { Palette } from 'lucide-react';
 import BlockIcon from './BlockIcon';
 import EmojiPicker, { insertEmojiAtFocusedField } from './EmojiPicker';
 import { EMAIL_SAFE_FONTS } from '@/lib/email-safety';
+import InlineAiMenu, { type AiRefineCommand } from './InlineAiMenu';
 
 // ============ Helpers ============
 
@@ -37,11 +39,13 @@ interface CanvasEditorProps {
   onOpenDesignHub?: (tab?: 'colors' | 'banners') => void;
   selectedBlockId?: string | null;
   onBlockSelect?: (blockId: string | null) => void;
+  aiEngine?: AIEngine;
+  selectedField?: string | null;
 }
 
 // ============ Component ============
 
-export default function CanvasEditor({ content, brand, onContentChange, onOpenDesignHub, selectedBlockId, onBlockSelect }: CanvasEditorProps) {
+export default function CanvasEditor({ content, brand, onContentChange, onOpenDesignHub, selectedBlockId, onBlockSelect, aiEngine = 'gemini', selectedField }: CanvasEditorProps) {
   const blocks = useMemo(() => content.blocks || [], [content.blocks]);
   const emailWidth = content.emailWidth || 600;
 
@@ -49,6 +53,8 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
   const [localActiveBlockId, setLocalActiveBlockId] = useState<string | null>(null);
   const activeBlockId = selectedBlockId ?? localActiveBlockId;
   const [showPalette, setShowPalette] = useState(false);
+  const [refiningKey, setRefiningKey] = useState<string | null>(null);
+  const [aiError, setAiError] = useState('');
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
 
@@ -64,6 +70,17 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
     setLocalActiveBlockId(id);
     onBlockSelect?.(id);
   }, [onBlockSelect]);
+
+  useEffect(() => {
+    if (!activeBlockId) return;
+    const timer = window.setTimeout(() => {
+      const card = document.querySelector<HTMLElement>(`[data-block-card="${activeBlockId}"]`);
+      card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      const target = (selectedField ? card?.querySelector<HTMLElement>(`[data-block-field="${selectedField}"] input, [data-block-field="${selectedField}"] textarea, [data-block-field="${selectedField}"] select`) : null) || card?.querySelector<HTMLElement>('input, textarea, select');
+      target?.focus({ preventScroll: true });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [activeBlockId, selectedField]);
 
   // Load assets for the adsets library
   const refreshAdsets = useCallback(() => {
@@ -111,6 +128,19 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
   const updateBlock = useCallback((id: string, updates: Partial<BlockConfig>) => {
     setBlocks(blocks.map(b => b.id === id ? { ...b, ...updates } as BlockConfig : b));
   }, [blocks, setBlocks]);
+
+  const refineText = async (blockId: string, field: string, value: string, command: AiRefineCommand, apply: (result: string) => void) => {
+    if (!value.trim()) { setAiError('Escribe contenido antes de usar IA.'); return; }
+    const key = `${blockId}:${field}`;
+    setRefiningKey(key); setAiError('');
+    try {
+      const response = await fetch('/api/refine', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: value, field, command, engine: aiEngine, brandId }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo refinar el texto.');
+      apply(data.result);
+    } catch (error) { setAiError(error instanceof Error ? error.message : 'No se pudo refinar el texto.'); }
+    finally { setRefiningKey(null); }
+  };
 
   // ============ Drag & Drop ============
 
@@ -208,11 +238,11 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
       );
     }
 
-    const fieldGroup = (label: string, children: React.ReactNode, withEmoji = false) => (
-      <div style={{ marginBottom: 10 }}>
+    const fieldGroup = (label: string, children: React.ReactNode, withEmoji = false, ai?: { field: string; value: string; apply: (value: string) => void }) => (
+      <div style={{ marginBottom: 10 }} data-block-field={ai?.field}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <label style={labelStyle}>{label}</label>
-          {withEmoji ? <EmojiPicker onSelect={insertEmojiAtFocusedField} /> : null}
+          <span style={{ display: 'flex', gap: 5 }}>{withEmoji ? <EmojiPicker onSelect={insertEmojiAtFocusedField} /> : null}{ai ? <InlineAiMenu pending={refiningKey === `${activeBlock.id}:${ai.field}`} onAction={command => refineText(activeBlock.id, ai.field, ai.value, command, ai.apply)} /> : null}</span>
         </div>
         {children}
       </div>
@@ -267,9 +297,9 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
       case 'text':
         return (
           <div style={{ padding: '8px 0' }}>
-            {fieldGroup('Etiqueta', <input className="form-input" value={activeBlock.label || ''} onChange={e => updateBlock(activeBlock.id, { label: e.target.value })} placeholder="MASTERCLASS" />, true)}
-            {fieldGroup('Título', <input className="form-input" value={activeBlock.headline || ''} onChange={e => updateBlock(activeBlock.id, { headline: e.target.value })} placeholder="Gran título" />, true)}
-            {fieldGroup('Cuerpo', <textarea className="form-input" style={{ minHeight: 80, resize: 'vertical' }} value={activeBlock.body || ''} onChange={e => updateBlock(activeBlock.id, { body: e.target.value })} placeholder="Texto del cuerpo..." />, true)}
+            {fieldGroup('Etiqueta', <input className="form-input" value={activeBlock.label || ''} onChange={e => updateBlock(activeBlock.id, { label: e.target.value })} placeholder="MASTERCLASS" />, true, { field: 'label', value: activeBlock.label || '', apply: label => updateBlock(activeBlock.id, { label }) })}
+            {fieldGroup('Título', <input className="form-input" value={activeBlock.headline || ''} onChange={e => updateBlock(activeBlock.id, { headline: e.target.value })} placeholder="Gran título" />, true, { field: 'headline', value: activeBlock.headline || '', apply: headline => updateBlock(activeBlock.id, { headline }) })}
+            {fieldGroup('Cuerpo', <textarea className="form-input" style={{ minHeight: 80, resize: 'vertical' }} value={activeBlock.body || ''} onChange={e => updateBlock(activeBlock.id, { body: e.target.value })} placeholder="Texto del cuerpo..." />, true, { field: 'body', value: activeBlock.body || '', apply: body => updateBlock(activeBlock.id, { body }) })}
           </div>
         );
 
@@ -277,8 +307,8 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
         return (
           <div style={{ padding: '8px 0' }}>
             {fieldGroup('URL de Imagen', <input className="form-input" value={activeBlock.imageUrl} onChange={e => updateBlock(activeBlock.id, { imageUrl: e.target.value })} placeholder="https://..." />)}
-            {fieldGroup('Título', <input className="form-input" value={activeBlock.title || ''} onChange={e => updateBlock(activeBlock.id, { title: e.target.value })} />, true)}
-            {fieldGroup('Texto', <textarea className="form-input" style={{ minHeight: 60, resize: 'vertical' }} value={activeBlock.text} onChange={e => updateBlock(activeBlock.id, { text: e.target.value })} />, true)}
+            {fieldGroup('Título', <input className="form-input" value={activeBlock.title || ''} onChange={e => updateBlock(activeBlock.id, { title: e.target.value })} />, true, { field: 'title', value: activeBlock.title || '', apply: title => updateBlock(activeBlock.id, { title }) })}
+            {fieldGroup('Texto', <textarea className="form-input" style={{ minHeight: 60, resize: 'vertical' }} value={activeBlock.text} onChange={e => updateBlock(activeBlock.id, { text: e.target.value })} />, true, { field: 'text', value: activeBlock.text, apply: text => updateBlock(activeBlock.id, { text }) })}
             {fieldGroup('Posición Imagen',
               <div style={{ display: 'flex', gap: 8 }}>
                 {(['left', 'right'] as const).map(pos => (
@@ -332,7 +362,7 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
       case 'bullets':
         return (
           <div style={{ padding: '8px 0' }}>
-            {fieldGroup('Título Bullets', <input className="form-input" value={activeBlock.bulletsTitle || ''} onChange={e => updateBlock(activeBlock.id, { bulletsTitle: e.target.value })} placeholder="Lo que vas a aprender" />, true)}
+            {fieldGroup('Título Bullets', <input className="form-input" value={activeBlock.bulletsTitle || ''} onChange={e => updateBlock(activeBlock.id, { bulletsTitle: e.target.value })} placeholder="Lo que vas a aprender" />, true, { field: 'bulletsTitle', value: activeBlock.bulletsTitle || '', apply: bulletsTitle => updateBlock(activeBlock.id, { bulletsTitle }) })}
             {fieldGroup('Marcador general', <input className="form-input" value={activeBlock.marker || ''} onChange={e => updateBlock(activeBlock.id, { marker: e.target.value })} placeholder="•  ✅  ›" />, true)}
             {activeBlock.bullets.map((b, i) => (
               <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
@@ -342,6 +372,7 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
                   updateBlock(activeBlock.id, { bullets: newBullets });
                 }} placeholder={`Bullet ${i + 1}`} />
                 <EmojiPicker onSelect={insertEmojiAtFocusedField} label={`Insertar emoji en bullet ${i + 1}`} />
+                <InlineAiMenu pending={refiningKey === `${activeBlock.id}:bullet-${i}`} onAction={command => refineText(activeBlock.id, `bullet-${i}`, b, command, result => { const bullets = [...activeBlock.bullets]; bullets[i] = result; updateBlock(activeBlock.id, { bullets }); })} />
                 <button type="button" onClick={() => {
                   const newBullets = activeBlock.bullets.filter((_, j) => j !== i);
                   updateBlock(activeBlock.id, { bullets: newBullets });
@@ -365,7 +396,7 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
       case 'quote':
         return (
           <div style={{ padding: '8px 0' }}>
-            {fieldGroup('Cita', <textarea className="form-input" style={{ minHeight: 60, resize: 'vertical' }} value={activeBlock.text} onChange={e => updateBlock(activeBlock.id, { text: e.target.value })} placeholder="El texto del testimonio..." />)}
+            {fieldGroup('Cita', <textarea className="form-input" style={{ minHeight: 60, resize: 'vertical' }} value={activeBlock.text} onChange={e => updateBlock(activeBlock.id, { text: e.target.value })} placeholder="El texto del testimonio..." />, false, { field: 'quote', value: activeBlock.text, apply: text => updateBlock(activeBlock.id, { text }) })}
             {fieldGroup('Autor', <input className="form-input" value={activeBlock.author || ''} onChange={e => updateBlock(activeBlock.id, { author: e.target.value })} placeholder="Nombre" />)}
             {fieldGroup('Cargo', <input className="form-input" value={activeBlock.role || ''} onChange={e => updateBlock(activeBlock.id, { role: e.target.value })} placeholder="CEO, Empresa" />)}
           </div>
@@ -374,9 +405,9 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
       case 'cta':
         return (
           <div style={{ padding: '8px 0' }}>
-            {fieldGroup('Texto del Botón', <input className="form-input" value={activeBlock.ctaText} onChange={e => updateBlock(activeBlock.id, { ctaText: e.target.value })} placeholder="RESERVAR MI LUGAR" />)}
+            {fieldGroup('Texto del Botón', <input className="form-input" value={activeBlock.ctaText} onChange={e => updateBlock(activeBlock.id, { ctaText: e.target.value })} placeholder="RESERVAR MI LUGAR" />, false, { field: 'ctaText', value: activeBlock.ctaText, apply: ctaText => updateBlock(activeBlock.id, { ctaText }) })}
             {fieldGroup('URL del Botón', <input className="form-input" value={activeBlock.ctaUrl} onChange={e => updateBlock(activeBlock.id, { ctaUrl: e.target.value })} placeholder="https://..." />)}
-            {fieldGroup('Pre-CTA (opcional)', <input className="form-input" value={activeBlock.preCta || ''} onChange={e => updateBlock(activeBlock.id, { preCta: e.target.value })} placeholder="¿Listo para comenzar?" />)}
+            {fieldGroup('Pre-CTA (opcional)', <input className="form-input" value={activeBlock.preCta || ''} onChange={e => updateBlock(activeBlock.id, { preCta: e.target.value })} placeholder="¿Listo para comenzar?" />, false, { field: 'preCta', value: activeBlock.preCta || '', apply: preCta => updateBlock(activeBlock.id, { preCta }) })}
             {fieldGroup('CTA Secundario (texto)', <input className="form-input" value={activeBlock.secondaryCtaText || ''} onChange={e => updateBlock(activeBlock.id, { secondaryCtaText: e.target.value })} />)}
             {fieldGroup('CTA Secundario (url)', <input className="form-input" value={activeBlock.secondaryCtaUrl || ''} onChange={e => updateBlock(activeBlock.id, { secondaryCtaUrl: e.target.value })} />)}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
@@ -401,7 +432,7 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
       case 'band':
         return (
           <div style={{ padding: '8px 0' }}>
-            {fieldGroup('Texto (opcional)', <input className="form-input" value={activeBlock.text || ''} onChange={e => updateBlock(activeBlock.id, { text: e.target.value })} placeholder="ENVÍO GRATIS HOY" />)}
+            {fieldGroup('Texto (opcional)', <input className="form-input" value={activeBlock.text || ''} onChange={e => updateBlock(activeBlock.id, { text: e.target.value })} placeholder="ENVÍO GRATIS HOY" />, false, { field: 'band', value: activeBlock.text || '', apply: text => updateBlock(activeBlock.id, { text }) })}
             {fieldGroup('Emoji (opcional)', <input className="form-input" value={activeBlock.emoji || ''} onChange={e => updateBlock(activeBlock.id, { emoji: e.target.value })} placeholder="🎁" />)}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
               <label style={labelStyle}>Color de fondo<input type="color" value={activeBlock.bgColor || '#29abe2'} onChange={e => updateBlock(activeBlock.id, { bgColor: e.target.value })} style={{ display: 'block', width: '100%', height: 34, marginTop: 5 }} /></label>
@@ -424,7 +455,7 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
       case 'badge':
         return (
           <div style={{ padding: '8px 0' }}>
-            {fieldGroup('Texto', <input className="form-input" value={activeBlock.text} onChange={e => updateBlock(activeBlock.id, { text: e.target.value })} placeholder="OFERTA" />)}
+            {fieldGroup('Texto', <input className="form-input" value={activeBlock.text} onChange={e => updateBlock(activeBlock.id, { text: e.target.value })} placeholder="OFERTA" />, false, { field: 'badge', value: activeBlock.text, apply: text => updateBlock(activeBlock.id, { text }) })}
             {fieldGroup('Emoji (opcional)', <input className="form-input" value={activeBlock.emoji || ''} onChange={e => updateBlock(activeBlock.id, { emoji: e.target.value })} placeholder="🔥" />)}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
               <label style={labelStyle}>Color de fondo<input type="color" value={activeBlock.bgColor || content.accentColor || brand?.colors.accent || '#2979b8'} onChange={e => updateBlock(activeBlock.id, { bgColor: e.target.value })} style={{ display: 'block', width: '100%', height: 34, marginTop: 5 }} /></label>
@@ -446,8 +477,8 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
         return (
           <div style={{ padding: '8px 0' }}>
             {fieldGroup('Emoji (opcional)', <input className="form-input" value={activeBlock.emoji || ''} onChange={e => updateBlock(activeBlock.id, { emoji: e.target.value })} placeholder="💡" />)}
-            {fieldGroup('Título', <input className="form-input" value={activeBlock.title || ''} onChange={e => updateBlock(activeBlock.id, { title: e.target.value })} placeholder="Consejo importante" />)}
-            {fieldGroup('Contenido', <textarea className="form-input" style={{ minHeight: 70, resize: 'vertical' }} value={activeBlock.body || ''} onChange={e => updateBlock(activeBlock.id, { body: e.target.value })} placeholder="Texto del aviso, tip o garantía..." />)}
+            {fieldGroup('Título', <input className="form-input" value={activeBlock.title || ''} onChange={e => updateBlock(activeBlock.id, { title: e.target.value })} placeholder="Consejo importante" />, false, { field: 'title', value: activeBlock.title || '', apply: title => updateBlock(activeBlock.id, { title }) })}
+            {fieldGroup('Contenido', <textarea className="form-input" style={{ minHeight: 70, resize: 'vertical' }} value={activeBlock.body || ''} onChange={e => updateBlock(activeBlock.id, { body: e.target.value })} placeholder="Texto del aviso, tip o garantía..." />, false, { field: 'body', value: activeBlock.body || '', apply: body => updateBlock(activeBlock.id, { body }) })}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
               <label style={labelStyle}>Color de fondo<input type="color" value={activeBlock.bgColor || lightenHexColor(selectedAccent, 85)} onChange={e => updateBlock(activeBlock.id, { bgColor: e.target.value })} style={{ display: 'block', width: '100%', height: 34, marginTop: 5 }} /></label>
               <label style={labelStyle}>Color de acento<input type="color" value={selectedAccent} onChange={e => updateBlock(activeBlock.id, { accentColor: e.target.value })} style={{ display: 'block', width: '100%', height: 34, marginTop: 5 }} /></label>
@@ -482,10 +513,24 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
       case 'footer':
         return (
           <div style={{ padding: '8px 0' }}>
-            {fieldGroup('Nota de pie', <textarea className="form-input" style={{ minHeight: 50, resize: 'vertical' }} value={activeBlock.footerNote || ''} onChange={e => updateBlock(activeBlock.id, { footerNote: e.target.value })} placeholder="Si no deseas recibir más correos..." />)}
+            {fieldGroup('Nota de pie', <textarea className="form-input" style={{ minHeight: 50, resize: 'vertical' }} value={activeBlock.footerNote || ''} onChange={e => updateBlock(activeBlock.id, { footerNote: e.target.value })} placeholder="Si no deseas recibir más correos..." />, false, { field: 'footerNote', value: activeBlock.footerNote || '', apply: footerNote => updateBlock(activeBlock.id, { footerNote }) })}
             <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
               El tagline, logo y disclaimer se toman de la marca.
             </p>
+          </div>
+        );
+
+      case 'coupon':
+        return (
+          <div style={{ padding: '8px 0' }}>
+            {fieldGroup('Etiqueta', <input className="form-input" value={activeBlock.eyebrow || ''} onChange={e => updateBlock(activeBlock.id, { eyebrow: e.target.value })} />, false, { field: 'couponEyebrow', value: activeBlock.eyebrow || '', apply: eyebrow => updateBlock(activeBlock.id, { eyebrow }) })}
+            {fieldGroup('Título', <input className="form-input" value={activeBlock.headline} onChange={e => updateBlock(activeBlock.id, { headline: e.target.value })} />, false, { field: 'couponHeadline', value: activeBlock.headline, apply: headline => updateBlock(activeBlock.id, { headline }) })}
+            {fieldGroup('Valor de oferta', <input className="form-input" value={activeBlock.value} onChange={e => updateBlock(activeBlock.id, { value: e.target.value })} />)}
+            {fieldGroup('Código', <input className="form-input" value={activeBlock.code || ''} onChange={e => updateBlock(activeBlock.id, { code: e.target.value })} />)}
+            {fieldGroup('Vigencia', <input className="form-input" value={activeBlock.expires || ''} onChange={e => updateBlock(activeBlock.id, { expires: e.target.value })} />)}
+            {fieldGroup('Condiciones', <textarea className="form-input" value={activeBlock.terms || ''} onChange={e => updateBlock(activeBlock.id, { terms: e.target.value })} />, false, { field: 'couponTerms', value: activeBlock.terms || '', apply: terms => updateBlock(activeBlock.id, { terms }) })}
+            {fieldGroup('CTA', <input className="form-input" value={activeBlock.ctaText || ''} onChange={e => updateBlock(activeBlock.id, { ctaText: e.target.value })} />)}
+            {fieldGroup('URL', <input className="form-input" value={activeBlock.ctaUrl || ''} onChange={e => updateBlock(activeBlock.id, { ctaUrl: e.target.value })} />)}
           </div>
         );
 
@@ -552,6 +597,7 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
       <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', borderBottom: '1px solid var(--border-subtle)', paddingBottom: 10, margin: '0 0 8px 0' }}>
         🧱 Canvas Visual
       </h3>
+      {aiError ? <p className="login-error" role="alert" style={{ margin: 0 }}>{aiError}</p> : null}
 
       {/* Email width control */}
       <div className="email-width-control">
@@ -614,12 +660,13 @@ export default function CanvasEditor({ content, brand, onContentChange, onOpenDe
               />
               <div
                 className={`canvas-block-card ${activeBlockId === block.id ? 'is-active' : ''} ${dragIndex === index ? 'is-dragging' : ''}`}
+                data-block-card={block.id}
                 draggable
                 onDragStart={(e) => handleDragStart(e, index)}
                 onDragOver={e => handleDragOver(e, index)}
                 onDrop={handleDrop}
                 onDragEnd={handleDragEnd}
-                onClick={() => selectBlock(block.id === activeBlockId ? null : block.id)}
+                onClick={() => selectBlock(block.id)}
               >
                 <span className="block-handle">⠿</span>
                 <div className="block-header" style={{ paddingLeft: 16 }}>

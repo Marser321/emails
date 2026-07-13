@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Brand, BRAND_CATEGORIES } from '@/lib/types';
+import { Brand, BrandIntelligence, BRAND_CATEGORIES } from '@/lib/types';
 import { createBrand, updateBrand } from '@/lib/brands';
 import { uploadAsset } from '@/lib/assets';
 import AssetPicker from '@/components/AssetPicker';
@@ -31,7 +31,12 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
   const logoFileRef = useRef<HTMLInputElement>(null);
 
   // Estados para importación automática desde URL
-  const [importUrl, setImportUrl] = useState('');
+  const [importUrl, setImportUrl] = useState(() => brand?.intelligence?.websiteUrl || '');
+  const [additionalUrls, setAdditionalUrls] = useState('');
+  const [analysisNotes, setAnalysisNotes] = useState('');
+  const [analysisFiles, setAnalysisFiles] = useState<{ name: string; type: 'application/pdf' | 'text/plain' | 'image/png' | 'image/jpeg' | 'image/webp'; data: string }[]>([]);
+  const [scrapedIntelligence, setScrapedIntelligence] = useState<BrandIntelligence | undefined>(() => brand?.intelligence);
+  const [pendingScraped, setPendingScraped] = useState<Partial<Brand> | null>(null);
   const [analyzingUrl, setAnalyzingUrl] = useState(false);
   const [scrapeError, setScrapeError] = useState('');
 
@@ -43,13 +48,16 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
       const res = await fetch('/api/brand-scraper', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: importUrl.trim() }),
+        body: JSON.stringify({ url: importUrl.trim(), additionalUrls: additionalUrls.split(/\r?\n/).map(value => value.trim()).filter(Boolean), notes: analysisNotes, attachments: analysisFiles, brandId: brand?.id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al analizar el sitio');
 
       const scraped = data.brand;
       if (scraped) {
+        setPendingScraped(scraped);
+        setScrapedIntelligence(scraped.intelligence);
+        if (isEditing) return;
         setForm({
           name: scraped.name || '',
           category: scraped.category || 'General',
@@ -77,7 +85,7 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
         if (scraped.voice?.toneOfVoice || scraped.voice?.audience || scraped.voice?.styleNotes || scraped.voice?.samplePhrases?.length) {
           setVoiceOpen(true);
         }
-        setImportUrl('');
+        setPendingScraped(null);
       }
     } catch (err) {
       console.error(err);
@@ -110,6 +118,34 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
   });
   const [samplePhrases, setSamplePhrases] = useState<string[]>([]);
   const [voiceOpen, setVoiceOpen] = useState(false);
+
+  const applyPendingScraped = () => {
+    if (!pendingScraped) return;
+    setForm(previous => ({
+      ...previous,
+      name: pendingScraped.name || previous.name,
+      category: pendingScraped.category || previous.category,
+      colorPrimary: pendingScraped.colors?.primary || previous.colorPrimary,
+      colorAccent: pendingScraped.colors?.accent || previous.colorAccent,
+      colorGradientStart: pendingScraped.colors?.gradientStart || previous.colorGradientStart,
+      colorGradientEnd: pendingScraped.colors?.gradientEnd || previous.colorGradientEnd,
+      fontHeading: pendingScraped.fonts?.heading || previous.fontHeading,
+      fontBody: pendingScraped.fonts?.body || previous.fontBody,
+      logoType: pendingScraped.logo?.type || previous.logoType,
+      logoValue: pendingScraped.logo?.value || previous.logoValue,
+      logoImageWidth: pendingScraped.logo?.imageWidth || previous.logoImageWidth,
+      logoShowName: pendingScraped.logo?.showName ?? previous.logoShowName,
+      logoNamePosition: pendingScraped.logo?.namePosition || previous.logoNamePosition,
+      footerTagline: pendingScraped.footer?.tagline || previous.footerTagline,
+      footerSubtitle: pendingScraped.footer?.subtitle || previous.footerSubtitle,
+      footerDisclaimer: pendingScraped.footer?.disclaimer || previous.footerDisclaimer,
+      voiceTone: pendingScraped.voice?.toneOfVoice || previous.voiceTone,
+      voiceAudience: pendingScraped.voice?.audience || previous.voiceAudience,
+      voiceStyleNotes: pendingScraped.voice?.styleNotes || previous.voiceStyleNotes,
+    }));
+    if (pendingScraped.voice?.samplePhrases) setSamplePhrases(pendingScraped.voice.samplePhrases);
+    setVoiceOpen(true); setPendingScraped(null);
+  };
 
   useEffect(() => {
     if (brand) {
@@ -174,6 +210,7 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
         styleNotes: form.voiceStyleNotes.trim(),
         samplePhrases: samplePhrases.map(p => p.trim()).filter(Boolean),
       },
+      intelligence: scrapedIntelligence,
     };
 
     try {
@@ -255,7 +292,7 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
 
           <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto', padding: '24px' }}>
             {/* Scraper / Auto-importador de marca desde URL */}
-            {!isEditing && (
+            {(
               <div 
                 className="glass-shell" 
                 style={{ 
@@ -295,6 +332,20 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
                       )}
                     </button>
                   </div>
+                  <details style={{ marginTop: 8 }}>
+                    <summary style={{ fontSize: 11, cursor: 'pointer', color: 'var(--text-secondary)', fontWeight: 700 }}>Fuentes y contexto adicional</summary>
+                    <textarea className="form-textarea" value={additionalUrls} onChange={e => setAdditionalUrls(e.target.value)} placeholder="Una URL adicional por línea" rows={2} style={{ marginTop: 8, fontSize: 11 }} />
+                    <textarea className="form-textarea" value={analysisNotes} onChange={e => setAnalysisNotes(e.target.value)} placeholder="Productos, ofertas, restricciones o contexto que no aparezca en el sitio" rows={3} style={{ marginTop: 6, fontSize: 11 }} />
+                    <label className="btn btn-secondary btn-sm" style={{ marginTop: 6, display: 'inline-flex', cursor: 'pointer' }}>
+                      Adjuntar PDF o imágenes
+                      <input type="file" accept="application/pdf,image/png,image/jpeg,image/webp,text/plain" multiple hidden onChange={async e => {
+                        const files = Array.from(e.target.files || []).slice(0, 3).filter(file => file.size <= 2_000_000);
+                        const encoded = await Promise.all(files.map(file => new Promise<{ name: string; type: 'application/pdf' | 'text/plain' | 'image/png' | 'image/jpeg' | 'image/webp'; data: string }>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve({ name: file.name, type: file.type as 'application/pdf' | 'text/plain' | 'image/png' | 'image/jpeg' | 'image/webp', data: String(reader.result || '').split(',')[1] || '' }); reader.onerror = reject; reader.readAsDataURL(file); })));
+                        setAnalysisFiles(encoded);
+                      }} />
+                    </label>
+                    {analysisFiles.length ? <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '6px 0 0' }}>{analysisFiles.map(file => file.name).join(' · ')}</p> : null}
+                  </details>
                   {scrapeError && (
                     <div style={{ fontSize: 11, color: 'var(--error)', marginTop: 6 }}>
                       ⚠️ {scrapeError}
@@ -303,6 +354,16 @@ export default function BrandModal({ brand, onClose, onSaved }: BrandModalProps)
                   <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.3 }}>
                     Nuestra IA extraerá colores, logos, textos y el tono de comunicación para rellenar este formulario automáticamente.
                   </p>
+                  {scrapedIntelligence ? (
+                    <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: 'var(--bg-tertiary)', display: 'grid', gap: 7 }}>
+                      <strong style={{ fontSize: 11 }}>Revisión de memoria extraída</strong>
+                      <textarea className="form-textarea" value={scrapedIntelligence.summary} onChange={e => setScrapedIntelligence({ ...scrapedIntelligence, summary: e.target.value })} rows={3} aria-label="Resumen de marca" />
+                      <input className="form-input" value={scrapedIntelligence.productsServices.join(', ')} onChange={e => setScrapedIntelligence({ ...scrapedIntelligence, productsServices: e.target.value.split(',').map(value => value.trim()).filter(Boolean) })} aria-label="Productos y servicios" placeholder="Productos y servicios" />
+                      <input className="form-input" value={scrapedIntelligence.commonOffers.join(', ')} onChange={e => setScrapedIntelligence({ ...scrapedIntelligence, commonOffers: e.target.value.split(',').map(value => value.trim()).filter(Boolean) })} aria-label="Ofertas habituales" placeholder="Ofertas habituales" />
+                      <input className="form-input" value={scrapedIntelligence.audiences.join(', ')} onChange={e => setScrapedIntelligence({ ...scrapedIntelligence, audiences: e.target.value.split(',').map(value => value.trim()).filter(Boolean) })} aria-label="Audiencias de marca" placeholder="Audiencias" />
+                      {pendingScraped ? <button type="button" className="btn btn-primary btn-sm" onClick={applyPendingScraped}>Aplicar cambios extraídos</button> : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             )}

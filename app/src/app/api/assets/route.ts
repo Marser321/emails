@@ -136,6 +136,7 @@ export async function POST(req: Request) {
     const kind = kindSchema.parse(String(form.get('kind') || 'other'));
     const altText = z.string().trim().min(1).max(240).parse(String(form.get('altText') || file.name.replace(/\.[^.]+$/, '')));
     const author = z.string().trim().min(1).max(120).parse(String(form.get('author') || user.email || 'Equipo interno'));
+    const intendedUse = z.string().trim().max(500).parse(String(form.get('intendedUse') || ''));
     const input = Buffer.from(await file.arrayBuffer());
     const base = `${sanitizeFilename(file.name)}-${Date.now().toString(36)}`;
     const { emailBuffer, thumbnailBuffer, width, height, extension, mimeType, hasAlpha } = await processAssetImage(input, kind);
@@ -152,7 +153,7 @@ export async function POST(req: Request) {
       brand_id: brandId, filename: `${base}.${extension}`, storage_path: storagePath, thumbnail_path: thumbnailPath,
       kind, alt_text: altText, width, height, mime_type: mimeType, has_alpha: hasAlpha,
       byte_size: emailBuffer.length, created_by: toUuidOrNull(user.id),
-      author,
+      author, intended_use: intendedUse || null,
     }).select().single();
     if (error) {
       await supabase.storage.from(BUCKET).remove([storagePath, thumbnailPath]);

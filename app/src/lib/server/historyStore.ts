@@ -17,6 +17,10 @@ interface HistoryRow {
   html_snapshot: string | null;
   rating: EmailHistoryEntry['rating'];
   notes: string | null;
+  offer_id?: string | null;
+  brief?: EmailHistoryEntry['brief'] | null;
+  is_pinned?: boolean;
+  is_archived?: boolean;
   created_at: string;
   updated_at: string;
   created_by?: string | null;
@@ -40,6 +44,10 @@ function mapHistoryFromDB(row: HistoryRow): EmailHistoryEntry {
     htmlSnapshot: row.html_snapshot || '',
     rating: row.rating,
     notes: row.notes || '',
+    offerId: row.offer_id || undefined,
+    brief: row.brief || undefined,
+    isPinned: row.is_pinned || false,
+    isArchived: row.is_archived || false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -59,7 +67,7 @@ async function allLocalHistory(): Promise<EmailHistoryEntry[]> {
   }
 }
 
-export async function listHistory(brandId?: string, limit?: number, query?: string): Promise<EmailHistoryEntry[]> {
+export async function listHistory(brandId?: string, limit?: number, query?: string, options?: { archived?: boolean; pinned?: boolean; before?: string }): Promise<EmailHistoryEntry[]> {
   let entries: EmailHistoryEntry[];
   if (!isSupabaseConfigured()) {
     entries = brandId ? await readJson(localFile(brandId), []) : await allLocalHistory();
@@ -67,6 +75,9 @@ export async function listHistory(brandId?: string, limit?: number, query?: stri
     const supabase = await createServerSupabase();
     let request = supabase.from('history').select('*').order('created_at', { ascending: false });
     if (brandId) request = request.eq('brand_id', brandId);
+    if (options?.archived !== undefined) request = request.eq('is_archived', options.archived);
+    if (options?.pinned !== undefined) request = request.eq('is_pinned', options.pinned);
+    if (options?.before) request = request.lt('updated_at', options.before);
     if (limit) request = request.limit(limit);
     const { data, error } = await request;
     if (error) throw new Error(error.message);
@@ -76,6 +87,9 @@ export async function listHistory(brandId?: string, limit?: number, query?: stri
     const normalized = query.toLocaleLowerCase('es');
     entries = entries.filter(entry => `${entry.subject} ${entry.prompt}`.toLocaleLowerCase('es').includes(normalized));
   }
+  if (options?.archived !== undefined) entries = entries.filter(entry => Boolean(entry.isArchived) === options.archived);
+  if (options?.pinned !== undefined) entries = entries.filter(entry => Boolean(entry.isPinned) === options.pinned);
+  if (options?.before) entries = entries.filter(entry => entry.updatedAt < options.before!);
   entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return limit ? entries.slice(0, limit) : entries;
 }
@@ -98,6 +112,7 @@ export async function addHistoryEntry(entry: Omit<EmailHistoryEntry, 'id' | 'cre
     engine: full.engine, model: full.model, prompt: full.prompt || null,
     subject: full.subject, content: full.content, html_snapshot: full.htmlSnapshot || null,
     rating: full.rating, notes: full.notes || null, created_at: full.createdAt, updated_at: full.updatedAt,
+    offer_id: full.offerId || null, brief: full.brief || null, is_pinned: full.isPinned || false, is_archived: full.isArchived || false,
     created_by: toUuidOrNull(createdBy), schema_version: 4,
   });
   if (error) throw new Error(error.message);
@@ -107,7 +122,7 @@ export async function addHistoryEntry(entry: Omit<EmailHistoryEntry, 'id' | 'cre
 export async function updateHistoryEntry(
   brandId: string,
   id: string,
-  patch: Partial<Pick<EmailHistoryEntry, 'rating' | 'notes' | 'htmlSnapshot' | 'subject' | 'content'>>,
+  patch: Partial<Pick<EmailHistoryEntry, 'rating' | 'notes' | 'htmlSnapshot' | 'subject' | 'content' | 'offerId' | 'brief' | 'isPinned' | 'isArchived'>>,
 ): Promise<EmailHistoryEntry | null> {
   if (!isSupabaseConfigured()) {
     const file = localFile(brandId);
@@ -126,6 +141,10 @@ export async function updateHistoryEntry(
   if (patch.htmlSnapshot !== undefined) updates.html_snapshot = patch.htmlSnapshot;
   if (patch.subject !== undefined) updates.subject = patch.subject;
   if (patch.content !== undefined) updates.content = patch.content;
+  if (patch.offerId !== undefined) updates.offer_id = patch.offerId || null;
+  if (patch.brief !== undefined) updates.brief = patch.brief;
+  if (patch.isPinned !== undefined) updates.is_pinned = patch.isPinned;
+  if (patch.isArchived !== undefined) updates.is_archived = patch.isArchived;
   const supabase = await createServerSupabase();
   const { data, error } = await supabase.from('history').update(updates).eq('id', id).eq('brand_id', brandId).select().maybeSingle();
   return error || !data ? null : mapHistoryFromDB(data as HistoryRow);

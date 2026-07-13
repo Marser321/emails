@@ -20,6 +20,11 @@ const safeUrlSchema = z.string().trim().max(2048).refine(
   value => !value || Boolean(sanitizeEmailUrl(value)),
   'La URL debe ser absoluta, un asset interno o un merge field permitido',
 );
+const absoluteHttpUrlSchema = z.url({ protocol: /^https?$/ }).max(2048);
+const campaignBriefSchema = z.object({
+  goal: z.string().max(500), audience: z.string().max(1000), offerId: z.string().max(128).optional(),
+  angle: z.string().max(1000), keyMessage: z.string().max(2000), cta: z.string().max(300), urgency: z.string().max(500), notes: z.string().max(5000),
+}).strict();
 
 const imageSchema = z.object({
   url: safeUrlSchema,
@@ -52,6 +57,7 @@ const emailBlockSchema = z.discriminatedUnion('type', [
   z.object({ id: blockId, type: z.literal('band'), bgColor: hexColorSchema.optional(), useGradient: z.boolean().optional(), gradientStart: hexColorSchema.optional(), gradientEnd: hexColorSchema.optional(), text: z.string().max(500).optional(), textColor: hexColorSchema.optional(), emoji: z.string().max(32).optional(), height: z.number().int().min(4).max(80).optional(), ...styleField }).strict(),
   z.object({ id: blockId, type: z.literal('badge'), text: z.string().trim().min(1).max(160), emoji: z.string().max(32).optional(), bgColor: hexColorSchema.optional(), textColor: hexColorSchema.optional(), align: z.enum(['left', 'center', 'right']).optional(), ...styleField }).strict(),
   z.object({ id: blockId, type: z.literal('callout'), emoji: z.string().max(32).optional(), title: z.string().max(500).optional(), body: longText.optional(), bgColor: hexColorSchema.optional(), accentColor: hexColorSchema.optional(), ...styleField }).strict(),
+  z.object({ id: blockId, type: z.literal('coupon'), offerId: z.string().max(128).optional(), eyebrow: shortText.optional(), headline: z.string().max(500), value: z.string().max(160), code: z.string().max(120).optional(), expires: shortText.optional(), terms: z.string().max(2000).optional(), ctaText: z.string().max(160).optional(), ctaUrl: safeUrlSchema.optional(), bgColor: hexColorSchema.optional(), accentColor: hexColorSchema.optional(), textColor: hexColorSchema.optional(), ...styleField }).strict(),
   z.object({ id: blockId, type: z.literal('divider'), color: hexColorSchema.optional(), thickness: z.number().int().min(1).max(8).optional(), lineStyle: z.enum(['solid', 'dashed', 'dotted']).optional(), ornament: z.string().max(32).optional(), ...styleField }).strict(),
   z.object({ id: blockId, type: z.literal('spacer'), height: z.number().int().min(4).max(80).optional(), ...styleField }).strict(),
   z.object({ id: blockId, type: z.literal('footer'), footerNote: z.string().max(1000).optional(), ...styleField }).strict(),
@@ -67,6 +73,7 @@ const optionalImageSchema = z.object({
 export const emailContentSchema = z.object({
   subject: z.string().max(300).optional(),
   preheader: z.string().max(500).optional(),
+  campaignBrief: campaignBriefSchema.optional(),
   // D3: campos legacy de contenido — opcionales (retro-compat de emails viejos).
   // La UI ya no los escribe; blocks[] es la fuente de verdad.
   label: z.string().max(300).optional(),
@@ -141,6 +148,17 @@ export const brandInputSchema = z.object({
   logo: z.object({ type: z.enum(['text', 'image']), value: z.string().trim().min(1).max(2048), imageWidth: z.number().int().min(40).max(600).optional(), showName: z.boolean().optional(), namePosition: z.enum(['right', 'below']).optional() }).strict(),
   footer: z.object({ tagline: z.string().max(500), subtitle: z.string().max(500), disclaimer: z.string().max(2000), address: z.string().max(500).optional(), unsubscribeLabel: z.string().max(120).optional(), unsubscribeUrl: safeUrlSchema.optional() }).strict(),
   voice: z.object({ toneOfVoice: z.string().max(500), audience: z.string().max(500), styleNotes: z.string().max(2000), samplePhrases: z.array(z.string().max(500)).max(20) }).strict().optional(),
+  intelligence: z.object({
+    websiteUrl: z.string().max(2048), summary: z.string().max(5000), industry: z.string().max(300),
+    productsServices: z.array(z.string().max(1000)).max(100), audiences: z.array(z.string().max(1000)).max(50),
+    painPoints: z.array(z.string().max(1000)).max(50), objections: z.array(z.string().max(1000)).max(50),
+    differentiators: z.array(z.string().max(1000)).max(50), benefits: z.array(z.string().max(1000)).max(50),
+    proofPoints: z.array(z.string().max(1000)).max(50), commonOffers: z.array(z.string().max(1000)).max(50),
+    keywords: z.array(z.string().max(200)).max(100), avoidWords: z.array(z.string().max(200)).max(100),
+    complianceNotes: z.array(z.string().max(1000)).max(50), warnings: z.array(z.string().max(1000)).max(50),
+    sources: z.array(z.object({ url: z.string().max(2048).optional(), label: z.string().max(300), kind: z.enum(['website', 'url', 'text', 'pdf', 'image']), analyzedAt: z.iso.datetime() }).strict()).max(30),
+    analyzedAt: z.iso.datetime(),
+  }).strict().optional(),
   isFavorite: z.boolean().optional(),
   createdAt: z.iso.datetime().optional(),
   updatedAt: z.iso.datetime().optional(),
@@ -160,24 +178,42 @@ export const historyCreateSchema = z.object({
   brandId: z.string().trim().min(1).max(128), templateType: templateSchema, engine: engineSchema,
   model: z.string().trim().min(1).max(120), prompt: z.string().max(5000).default(''), subject: z.string().max(300).default(''),
   content: emailContentSchema, htmlSnapshot: z.string().max(400000).default(''), rating: z.enum(['up', 'down']).nullable().default(null),
-  notes: z.string().max(5000).default(''),
+  notes: z.string().max(5000).default(''), offerId: z.string().max(128).optional(), brief: campaignBriefSchema.optional(),
+  isPinned: z.boolean().optional(), isArchived: z.boolean().optional(),
 }).strict();
 
 export const historyPatchSchema = z.object({
   brandId: z.string().trim().min(1).max(128).optional(), rating: z.enum(['up', 'down']).nullable().optional(),
   notes: z.string().max(5000).optional(), htmlSnapshot: z.string().max(400000).optional(), subject: z.string().max(300).optional(),
-  content: emailContentSchema.optional(),
+  content: emailContentSchema.optional(), offerId: z.string().max(128).nullable().optional(), brief: campaignBriefSchema.optional(),
+  isPinned: z.boolean().optional(), isArchived: z.boolean().optional(), versionReason: z.enum(['autosave', 'manual', 'restored', 'duplicated', 'exported']).optional(),
 }).strict();
 
 export const generateRequestSchema = z.object({
   prompt: z.string().trim().min(3).max(5000), templateType: templateSchema,
   brandId: z.string().trim().min(1).max(128).optional(), brand: brandInputSchema.optional(), engine: engineSchema.optional(),
+  offerId: z.string().trim().max(128).optional(), brief: campaignBriefSchema.optional(),
 }).strict();
 
 export const refineRequestSchema = z.object({
   text: z.string().trim().min(1).max(10000), field: z.string().trim().min(1).max(80),
   command: z.enum(['optimize', 'shorten', 'casual', 'formal', 'rewrite']).default('optimize'), engine: engineSchema.optional(),
   brandId: z.string().trim().max(128).optional(),
+}).strict();
+
+export const offerInputSchema = z.object({
+  id: z.string().max(128).optional(), brandId: z.string().trim().min(1).max(128), name: z.string().trim().min(1).max(200),
+  type: z.enum(['percent', 'fixed', 'price', 'freebie', 'bundle', 'event', 'custom']), value: z.string().max(160), currency: z.string().max(12).default('USD'),
+  originalPrice: z.string().max(80).optional(), salePrice: z.string().max(80).optional(), code: z.string().max(120).optional(),
+  startsAt: z.iso.datetime().optional(), endsAt: z.iso.datetime().optional(), terms: z.string().max(3000).default(''), audience: z.string().max(1000).default(''),
+  urgency: z.string().max(500).default(''), landingUrl: safeUrlSchema.default(''), status: z.enum(['draft', 'active', 'expired', 'archived']).default('draft'),
+}).strict();
+export const offerPatchSchema = offerInputSchema.partial().omit({ id: true, brandId: true }).strict();
+
+export const brandAnalysisSchema = z.object({
+  url: absoluteHttpUrlSchema, additionalUrls: z.array(absoluteHttpUrlSchema).max(6).default([]), notes: z.string().max(20000).default(''),
+  brandId: z.string().max(128).optional(), engine: engineSchema.optional(),
+  attachments: z.array(z.object({ name: z.string().max(240), type: z.enum(['application/pdf', 'text/plain', 'image/png', 'image/jpeg', 'image/webp']), data: z.string().max(3_000_000) }).strict()).max(3).default([]),
 }).strict();
 
 export const abTestRequestSchema = z.object({

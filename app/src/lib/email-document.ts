@@ -7,7 +7,7 @@ import { defaultPresetForObjective } from './template-presets';
 // la posición que respeta este orden, sin reordenar los bloques existentes.
 export const CANONICAL_BLOCK_ORDER: CanvasBlockType[] = [
   'header', 'hero', 'text', 'image-text', 'bullets', 'gallery', 'quote', 'infobox',
-  'band', 'badge', 'callout', 'cta', 'divider', 'spacer', 'footer',
+  'band', 'badge', 'callout', 'coupon', 'cta', 'divider', 'spacer', 'footer',
 ];
 
 function canonicalIndex(type: CanvasBlockType): number {

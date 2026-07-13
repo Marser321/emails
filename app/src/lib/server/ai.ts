@@ -1,5 +1,5 @@
 // Abstracción de motor IA — Gemini y Claude detrás de la misma interfaz
-import { AIEngine, Brand, EmailContent, EmailHistoryEntry, TemplateType } from '@/lib/types';
+import { AIEngine, Brand, CampaignBrief, EmailContent, EmailHistoryEntry, Offer, TemplateType } from '@/lib/types';
 import { getSettings, resolveApiKey } from './settingsStore';
 
 export interface GenerateParams {
@@ -7,6 +7,8 @@ export interface GenerateParams {
   templateType: TemplateType;
   brand: Brand;
   examples: EmailHistoryEntry[];
+  offer?: Offer;
+  brief?: CampaignBrief;
 }
 
 export interface RefineParams {

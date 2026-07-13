@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emailDocumentSchema, settingsPatchSchema } from './api-schemas';
+import { brandAnalysisSchema, emailDocumentSchema, offerInputSchema, settingsPatchSchema } from './api-schemas';
 
 const document = {
   schemaVersion: 3, brandId: 'brand', template: 'newsletter', subject: 'Asunto', preheader: 'Resumen', locale: 'es', emailWidth: 600,
@@ -81,5 +81,11 @@ describe('API schemas', () => {
 
     const invalid = { ...valid, blocks: valid.blocks.map((block, index) => index === 1 ? { ...block, ctaRadius: 29 } : block) };
     expect(emailDocumentSchema.safeParse(invalid).success).toBe(false);
+  });
+
+  it('validates reusable offers and bounded brand analysis sources', () => {
+    expect(offerInputSchema.safeParse({ brandId: 'brand', name: 'Promo', type: 'percent', value: '30% OFF', currency: 'USD', terms: '', audience: '', urgency: '', landingUrl: 'https://example.com', status: 'active' }).success).toBe(true);
+    expect(brandAnalysisSchema.safeParse({ url: 'https://example.com', additionalUrls: [], notes: '' }).success).toBe(true);
+    expect(brandAnalysisSchema.safeParse({ url: 'file:///secret', additionalUrls: [], notes: '' }).success).toBe(false);
   });
 });

@@ -40,6 +40,7 @@ function generatedContent() {
 async function mockWorkspace(page: import('@playwright/test').Page) {
   await page.route('**/api/brands', route => route.fulfill({ json: [testBrand] }));
   await page.route('**/api/drafts', route => route.fulfill({ json: [] }));
+  await page.route('**/api/offers?*', route => route.fulfill({ json: [] }));
   await page.route('**/api/settings', route => route.fulfill({ json: {
     hasGeminiKey: true, hasGroqKey: true, hasAnthropicKey: false, defaultEngine: 'gemini',
     assetsPublicBaseUrl: '', supabaseAssetsBaseUrl: '',
@@ -155,6 +156,7 @@ test('dashboard, editor, brand modal and asset library visual states', async ({ 
 
 test('preset, contextual inspector and undo work together', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.route('**/api/offers?*', route => route.fulfill({ json: [] }));
   await page.route('**/api/brands', route => route.fulfill({ json: [{
     id: 'test-brand', name: 'AD Media Solution', category: 'Marketing', isFavorite: true,
     colors: { primary: '#0b2a4a', accent: '#29abe2', gradientStart: '#29abe2', gradientEnd: '#1b6fc4' },
@@ -171,6 +173,29 @@ test('preset, contextual inspector and undo work together', async ({ page }) => 
   await textColor.fill('#24566f');
   await expect(textColor).toHaveValue('#24566f');
   await expect(page.getByRole('button', { name: '↩️' })).toBeEnabled();
+});
+
+test('inline AI and preview click focus the exact canvas field', async ({ page }) => {
+  await mockWorkspace(page);
+  await page.route('**/api/history?*', route => route.fulfill({ json: [] }));
+  await page.route('**/api/refine', async route => {
+    const body = route.request().postDataJSON();
+    expect(body.command).toBe('optimize');
+    expect(body.field).toBe('headline');
+    await route.fulfill({ json: { result: 'Titular refinado por IA' } });
+  });
+  await page.goto('/editor?brand=test-brand', { waitUntil: 'domcontentloaded' });
+  const headline = page.locator('#content-headline');
+  await headline.fill('Titular original');
+  const group = headline.locator('..');
+  await group.getByRole('button', { name: 'IA' }).click();
+  await page.getByRole('menuitem', { name: 'Optimizar' }).click();
+  await expect(headline).toHaveValue('Titular refinado por IA');
+
+  const previewHeadline = page.frameLocator('iframe[title="Email Preview"]').locator('[data-editor-field$="-headline"]');
+  await previewHeadline.click();
+  await expect(page.locator('[data-block-field="headline"] input')).toBeFocused();
+  await expect(page.locator('[data-block-field="headline"] input')).toHaveValue('Titular refinado por IA');
 });
 
 test('generate, autosave, library and reopen preserve the latest content', async ({ page }) => {

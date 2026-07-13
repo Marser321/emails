@@ -43,6 +43,12 @@ describe('analyzeEmailHtml', () => {
     expect(checks.links.insecure).toBe(1);
     expect(checks.links.total - checks.links.empty - checks.links.insecure).toBe(2);
   });
+
+  it('detecta variables GHL desconocidas y fondos negros accidentales', () => {
+    const checks = analyzeEmailHtml(baseHtml('<div style="background:#000000">{{contact.first_name}} {{contact.magic}}</div>'));
+    expect(checks.mergeFields.unknown).toEqual(['contact.magic']);
+    expect(checks.suspiciousBlackBackgrounds).toBe(1);
+  });
 });
 
 describe('listEmailIssues', () => {

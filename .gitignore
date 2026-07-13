@@ -10,3 +10,5 @@ app/tsconfig.tsbuildinfo
 !app/.env.example
 env_dump*.txt
 app/data/assets
+app/data/history/*.json
+app/data/history-versions/
