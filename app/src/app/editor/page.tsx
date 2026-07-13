@@ -899,10 +899,15 @@ function EditorContent() {
       }
     }
     if (!hasKeyForEngine(currentEngine, currentSettings)) {
-      setApiKeyModalOpen(true);
-    } else {
-      setAiPromptModalOpen(true);
+      const availableEngine = AI_ENGINES.find(engine => hasKeyForEngine(engine, currentSettings));
+      if (!availableEngine) {
+        setApiKeyModalOpen(true);
+        return;
+      }
+      currentEngine = availableEngine;
+      setSelectedEngine(availableEngine);
     }
+    setAiPromptModalOpen(true);
   };
 
   const handleChangeDefaultEngine = async (engine: AIEngine) => {

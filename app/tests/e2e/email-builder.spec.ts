@@ -203,7 +203,7 @@ test('generation waits for provider settings and opens the campaign brief', asyn
   await page.route('**/api/settings', async route => {
     await new Promise(resolve => setTimeout(resolve, 700));
     await route.fulfill({ json: {
-      hasGeminiKey: true, hasGroqKey: true, hasAnthropicKey: false, defaultEngine: 'gemini',
+      hasGeminiKey: true, hasGroqKey: true, hasAnthropicKey: false, defaultEngine: 'claude',
       assetsPublicBaseUrl: '', supabaseAssetsBaseUrl: '',
     } });
   });
@@ -212,6 +212,7 @@ test('generation waits for provider settings and opens the campaign brief', asyn
   await expect(page.getByRole('heading', { name: /Generar Copy con IA/ })).toBeVisible();
   await expect(page.getByLabel('Oferta reutilizable')).toBeVisible();
   await expect(page.getByLabel('¿De qué trata este correo?')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Gemini/ })).toHaveClass(/active/);
 });
 
 test('generate, autosave, library and reopen preserve the latest content', async ({ page }) => {
