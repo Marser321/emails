@@ -11,6 +11,33 @@ export interface BrandVoice {
   samplePhrases: string[];
 }
 
+export interface BrandSource {
+  url?: string;
+  label: string;
+  kind: 'website' | 'url' | 'text' | 'pdf' | 'image';
+  analyzedAt: string;
+}
+
+export interface BrandIntelligence {
+  websiteUrl: string;
+  summary: string;
+  industry: string;
+  productsServices: string[];
+  audiences: string[];
+  painPoints: string[];
+  objections: string[];
+  differentiators: string[];
+  benefits: string[];
+  proofPoints: string[];
+  commonOffers: string[];
+  keywords: string[];
+  avoidWords: string[];
+  complianceNotes: string[];
+  sources: BrandSource[];
+  analyzedAt: string;
+  warnings: string[];
+}
+
 export interface BrandColors {
   primary: string;
   accent: string;
@@ -87,9 +114,45 @@ export interface Brand {
   logo: BrandLogo;
   footer: BrandFooter;
   voice?: BrandVoice;
+  intelligence?: BrandIntelligence;
   isFavorite: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export type OfferType = 'percent' | 'fixed' | 'price' | 'freebie' | 'bundle' | 'event' | 'custom';
+export type OfferStatus = 'draft' | 'active' | 'expired' | 'archived';
+
+export interface Offer {
+  id: string;
+  brandId: string;
+  name: string;
+  type: OfferType;
+  value: string;
+  currency: string;
+  originalPrice?: string;
+  salePrice?: string;
+  code?: string;
+  startsAt?: string;
+  endsAt?: string;
+  terms: string;
+  audience: string;
+  urgency: string;
+  landingUrl: string;
+  status: OfferStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CampaignBrief {
+  goal: string;
+  audience: string;
+  offerId?: string;
+  angle: string;
+  keyMessage: string;
+  cta: string;
+  urgency: string;
+  notes: string;
 }
 
 // ===== Bloques opcionales del email (slots de orden fijo — legacy) =====
@@ -143,6 +206,7 @@ export type CanvasBlockType =
   | 'band'
   | 'badge'
   | 'callout'
+  | 'coupon'
   | 'divider'
   | 'spacer'
   | 'footer';
@@ -259,6 +323,22 @@ export interface CalloutBlockConfig extends BlockBase {
   accentColor?: string;
 }
 
+export interface CouponBlockConfig extends BlockBase {
+  type: 'coupon';
+  offerId?: string;
+  eyebrow?: string;
+  headline: string;
+  value: string;
+  code?: string;
+  expires?: string;
+  terms?: string;
+  ctaText?: string;
+  ctaUrl?: string;
+  bgColor?: string;
+  accentColor?: string;
+  textColor?: string;
+}
+
 export interface DividerBlockConfig extends BlockBase {
   type: 'divider';
   color?: string;
@@ -291,6 +371,7 @@ export type BlockConfig =
   | BandBlockConfig
   | BadgeBlockConfig
   | CalloutBlockConfig
+  | CouponBlockConfig
   | DividerBlockConfig
   | SpacerBlockConfig
   | FooterBlockConfig;
@@ -309,6 +390,7 @@ export const CANVAS_BLOCK_CATALOG: { type: CanvasBlockType; label: string }[] = 
   { type: 'band', label: 'Banda de color' },
   { type: 'badge', label: 'Etiqueta Badge' },
   { type: 'callout', label: 'Caja destacada' },
+  { type: 'coupon', label: 'Cupón de oferta' },
   { type: 'divider', label: 'Separador' },
   { type: 'spacer', label: 'Espaciador' },
   { type: 'footer', label: 'Footer' },
@@ -338,6 +420,7 @@ export function createDefaultBlock(type: CanvasBlockType): BlockConfig {
     case 'band':       return { id, type, bgColor: '#29abe2', useGradient: false, gradientStart: '#29abe2', gradientEnd: '#1b6fc4', text: '', textColor: '#ffffff', emoji: '', height: 20 };
     case 'badge':      return { id, type, text: '', emoji: '', textColor: '#ffffff', align: 'center' };
     case 'callout':    return { id, type, emoji: '', title: '', body: '' };
+    case 'coupon':     return { id, type, eyebrow: 'OFERTA EXCLUSIVA', headline: 'Beneficio especial', value: '30% OFF', code: '', expires: '', terms: '', ctaText: 'Aprovechar oferta', ctaUrl: '' };
     case 'divider':    return { id, type, color: '#e5eaf0', thickness: 1, lineStyle: 'solid', ornament: '' };
     case 'spacer':     return { id, type, height: 20 };
     case 'footer':     return { id, type, footerNote: '' };
@@ -347,6 +430,7 @@ export function createDefaultBlock(type: CanvasBlockType): BlockConfig {
 export interface EmailContent {
   subject?: string;
   preheader?: string;
+  campaignBrief?: CampaignBrief;
   // ===== Campos legacy de CONTENIDO — SOLO LECTURA (retro-compatibilidad) =====
   // D3: `content.blocks[]` es la fuente única de verdad. Estos campos solo se
   // POBLAN en la capa de migración (`email-document.ts`: `legacyContentToBlocks`
@@ -489,8 +573,26 @@ export interface EmailHistoryEntry {
   htmlSnapshot: string;
   rating: 'up' | 'down' | null;
   notes: string;
+  offerId?: string;
+  brief?: CampaignBrief;
+  isPinned?: boolean;
+  isArchived?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export type HistoryVersionReason = 'generated' | 'autosave' | 'manual' | 'restored' | 'duplicated' | 'exported';
+
+export interface EmailHistoryVersion {
+  id: string;
+  historyId: string;
+  brandId: string;
+  version: number;
+  reason: HistoryVersionReason;
+  subject: string;
+  content: EmailContent;
+  htmlSnapshot: string;
+  createdAt: string;
 }
 
 // Borrador guardado en la biblioteca (data/drafts.json)

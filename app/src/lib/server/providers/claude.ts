@@ -63,7 +63,7 @@ export class ClaudeProvider implements AIProvider {
         system: buildGenerateSystemPrompt(p.brand, p.examples),
         thinking: { type: 'disabled' },
         output_config: { format: { type: 'json_schema', schema: GENERATE_JSON_SCHEMA } },
-        messages: [{ role: 'user', content: buildGenerateUserPrompt(p.prompt, p.templateType, p.brand) }],
+        messages: [{ role: 'user', content: buildGenerateUserPrompt(p.prompt, p.templateType, p.brand, p.offer, p.brief) }],
       });
       return parseGeneratedContent(extractText(response));
     } catch (error) {

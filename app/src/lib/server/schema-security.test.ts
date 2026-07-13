@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const schema = readFileSync(path.join(process.cwd(), 'supabase', 'schema.sql'), 'utf8').toLowerCase();
 
 describe('contrato de seguridad de Supabase', () => {
-  it.each(['brands', 'history', 'drafts', 'settings', 'assets'])('activa RLS y revoca anon en %s', table => {
+  it.each(['brands', 'history', 'drafts', 'settings', 'assets', 'offers', 'history_versions'])('activa RLS y revoca anon en %s', table => {
     expect(schema).toContain(`alter table public.${table} enable row level security`);
     expect(schema).toMatch(new RegExp(`revoke all on table[\\s\\S]*public\\.${table}[\\s\\S]*from anon`));
   });

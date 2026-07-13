@@ -82,7 +82,7 @@ export class GroqProvider implements AIProvider {
 
   async generate(params: GenerateParams): Promise<Partial<EmailContent>> {
     const system = buildGenerateSystemPrompt(params.brand, params.examples);
-    const user = buildGenerateUserPrompt(params.prompt, params.templateType, params.brand);
+    const user = buildGenerateUserPrompt(params.prompt, params.templateType, params.brand, params.offer, params.brief);
     const options = { schema: GENERATE_JSON_SCHEMA, maxTokens: 8192 };
     const value = await this.complete(system, user, options);
     try {

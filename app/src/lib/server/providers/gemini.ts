@@ -53,7 +53,7 @@ export class GeminiProvider implements AIProvider {
     try {
       const response = await this.ai.models.generateContent({
         model: MODEL,
-        contents: buildGenerateUserPrompt(p.prompt, p.templateType, p.brand),
+        contents: buildGenerateUserPrompt(p.prompt, p.templateType, p.brand, p.offer, p.brief),
         config: {
           systemInstruction: buildGenerateSystemPrompt(p.brand, p.examples),
           responseMimeType: 'application/json',

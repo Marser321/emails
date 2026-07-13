@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { deleteHistoryEntry, getHistoryEntry, updateHistoryEntry } from '@/lib/server/historyStore';
 import { authenticationErrorResponse, requireUser } from '@/lib/server/auth';
 import { historyPatchSchema, validationMessage } from '@/lib/server/api-schemas';
+import { createHistoryVersion } from '@/lib/server/historyVersionStore';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -48,10 +49,17 @@ export async function PATCH(req: Request, { params }: Ctx) {
     if (typeof body.htmlSnapshot === 'string') patch.htmlSnapshot = body.htmlSnapshot;
     if (typeof body.subject === 'string') patch.subject = body.subject;
     if (body.content) patch.content = body.content;
+    if (body.offerId !== undefined) patch.offerId = body.offerId || undefined;
+    if (body.brief) patch.brief = body.brief;
+    if (typeof body.isPinned === 'boolean') patch.isPinned = body.isPinned;
+    if (typeof body.isArchived === 'boolean') patch.isArchived = body.isArchived;
 
     const updated = await updateHistoryEntry(brandId, id, patch);
     if (!updated) {
       return NextResponse.json({ error: 'Registro no encontrado' }, { status: 404 });
+    }
+    if (body.content || typeof body.subject === 'string' || typeof body.htmlSnapshot === 'string') {
+      await createHistoryVersion(updated, body.versionReason || 'autosave');
     }
     return NextResponse.json(updated);
   } catch (error) {

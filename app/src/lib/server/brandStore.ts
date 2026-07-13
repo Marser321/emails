@@ -15,6 +15,7 @@ interface BrandRow {
   logo: Brand['logo'];
   footer: Brand['footer'];
   voice: Brand['voice'] | null;
+  intelligence: Brand['intelligence'] | null;
   is_favorite: boolean;
   created_at: string;
   updated_at: string;
@@ -35,6 +36,7 @@ function mapBrandFromDB(row: BrandRow): Brand {
     logo: row.logo,
     footer: row.footer,
     voice: row.voice || undefined,
+    intelligence: row.intelligence || undefined,
     isFavorite: row.is_favorite,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -51,6 +53,7 @@ function toRow(brand: Brand): BrandRow {
     logo: brand.logo,
     footer: brand.footer,
     voice: brand.voice || null,
+    intelligence: brand.intelligence || null,
     is_favorite: brand.isFavorite,
     created_at: brand.createdAt,
     updated_at: brand.updatedAt,
@@ -125,6 +128,7 @@ export async function updateBrand(id: string, data: Partial<Brand>): Promise<Bra
   if (data.logo !== undefined) updates.logo = data.logo;
   if (data.footer !== undefined) updates.footer = data.footer;
   if (data.voice !== undefined) updates.voice = data.voice;
+  if (data.intelligence !== undefined) updates.intelligence = data.intelligence;
   if (data.isFavorite !== undefined) updates.is_favorite = data.isFavorite;
 
   const supabase = await createServerSupabase();

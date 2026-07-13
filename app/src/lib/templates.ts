@@ -1,7 +1,7 @@
 // Template Engine — Generates email-client-compatible HTML
 import { BlockConfig, Brand, EmailContent, GalleryBlock, HeroBlock, ImageTextBlock, LayoutVariant, QuoteBlock } from './types';
 import { legacyContentToBlocks } from './email-document';
-import { sanitizeBrandForEmail, sanitizeContentForEmail } from './email-safety';
+import { sanitizeBrandForEmail, sanitizeContentForEmail, sanitizeEmailUrl } from './email-safety';
 
 export interface RenderOptions {
   // Base pública para reescribir /api/assets/ al exportar (se aplica client-side en export.ts)
@@ -515,6 +515,28 @@ function renderCanvasBlock(block: BlockConfig, brand: Brand, index: number, cont
   ${ctaSec}
 </td>
 </tr>`;
+    }
+
+    case 'coupon': {
+      const bg = block.bgColor || '#f7f4ec';
+      const couponAccent = block.accentColor || accent;
+      const color = block.textColor || primary;
+      const cta = block.ctaText && block.ctaUrl ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr><td bgcolor="${couponAccent}" style="background:${couponAccent};border-radius:8px;"><a href="${sanitizeEmailUrl(block.ctaUrl) || '#'}" target="_blank" rel="noopener noreferrer nofollow" data-block-id="${block.id}" data-editor-field="${prefix}-ctaText" style="display:inline-block;padding:12px 28px;color:#ffffff;text-decoration:none;font-family:${bodyFont},Arial,sans-serif;font-size:15px;font-weight:700;">${block.ctaText}</a></td></tr></table>` : '';
+      return `
+<!-- ====== BLOCK ${index}: COUPON ====== -->
+<tr><td style="${surface}padding:${padding};" data-block-id="${block.id}">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${bg};border:2px dashed ${couponAccent};border-radius:14px;">
+    <tr><td align="center" style="padding:24px;color:${color};">
+      ${block.eyebrow ? `<p data-block-id="${block.id}" data-editor-field="${prefix}-couponEyebrow" style="margin:0 0 6px;color:${couponAccent};font-family:${bodyFont},Arial,sans-serif;font-size:12px;font-weight:800;letter-spacing:1.4px;">${block.eyebrow}</p>` : ''}
+      <h2 data-block-id="${block.id}" data-editor-field="${prefix}-couponHeadline" style="margin:0 0 10px;color:${color};font-family:${headingFont},Arial,sans-serif;font-size:24px;line-height:1.2;">${block.headline}</h2>
+      <p data-block-id="${block.id}" data-editor-field="${prefix}-value" style="margin:0 0 10px;color:${couponAccent};font-family:${headingFont},Arial,sans-serif;font-size:34px;font-weight:800;line-height:1;">${block.value}</p>
+      ${block.code ? `<p data-block-id="${block.id}" data-editor-field="${prefix}-code" style="margin:0 0 8px;font-family:monospace;font-size:18px;font-weight:700;letter-spacing:2px;">Código: ${block.code}</p>` : ''}
+      ${block.expires ? `<p data-block-id="${block.id}" data-editor-field="${prefix}-expires" style="margin:0 0 8px;font-family:${bodyFont},Arial,sans-serif;font-size:13px;">Válido hasta ${block.expires}</p>` : ''}
+      ${block.terms ? `<p data-block-id="${block.id}" data-editor-field="${prefix}-couponTerms" style="margin:0 0 14px;color:${mutedColor};font-family:${bodyFont},Arial,sans-serif;font-size:11px;line-height:1.5;">${block.terms}</p>` : ''}
+      ${cta}
+    </td></tr>
+  </table>
+</td></tr>`;
     }
 
     case 'band': {

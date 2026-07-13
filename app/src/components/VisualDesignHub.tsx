@@ -5,7 +5,7 @@ import {
   Palette, CheckCircle2, AlertTriangle, X, Sparkles, Image as ImageIcon,
   RefreshCw, Check, Eye, Sliders, Type, Layers
 } from 'lucide-react';
-import { Brand, EmailContent } from '@/lib/types';
+import { Brand, EmailContent, Offer } from '@/lib/types';
 import { uploadAsset } from '@/lib/assets';
 
 interface VisualDesignHubProps {
@@ -20,6 +20,7 @@ interface VisualDesignHubProps {
   onInjectAdset: (imageUrl: string) => void;
   brandId: string;
   initialTab?: 'colors' | 'banners';
+  offer?: Offer;
 }
 
 // Preset color palettes (highly curated, beautiful & readable)
@@ -214,6 +215,7 @@ export default function VisualDesignHub({
   brandId,
   onSaveBrandColors,
   initialTab = 'colors',
+  offer,
 }: VisualDesignHubProps) {
   const [activeTab, setActiveTab] = useState<'colors' | 'banners'>(initialTab);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -228,16 +230,20 @@ export default function VisualDesignHub({
   const [textColor, setTextColor] = useState(content.typography?.bodyColor || '#4a5568');
 
   // === BANNER CREATOR STATES ===
-  const [bannerLayout, setBannerLayout] = useState<'minimal' | 'promo' | 'coupon'>('promo');
-  const [bannerTitle, setBannerTitle] = useState('¡ÚLTIMA OPORTUNIDAD!');
-  const [bannerSubtitle, setBannerSubtitle] = useState('Aprende a reparar tu crédito e impulsa tus finanzas hoy.');
-  const [bannerCtaText, setBannerCtaText] = useState('Reservar Cupo Gratis');
-  const [bannerBadgeText, setBannerBadgeText] = useState('30% OFF');
+  const [bannerLayout, setBannerLayout] = useState<'minimal' | 'promo' | 'coupon'>(offer ? 'coupon' : 'promo');
+  const [bannerTitle, setBannerTitle] = useState(offer?.name || '¡ÚLTIMA OPORTUNIDAD!');
+  const [bannerSubtitle, setBannerSubtitle] = useState(offer ? [offer.urgency, offer.terms].filter(Boolean).join(' · ') : 'Aprende a reparar tu crédito e impulsa tus finanzas hoy.');
+  const [bannerCtaText, setBannerCtaText] = useState(offer ? 'Aprovechar oferta' : 'Reservar Cupo Gratis');
+  const [bannerBadgeText, setBannerBadgeText] = useState(offer?.value || '30% OFF');
+  const [bannerCode, setBannerCode] = useState(offer?.code || '');
+  const [bannerExpiry, setBannerExpiry] = useState(offer?.endsAt ? new Date(offer.endsAt).toLocaleDateString('es') : '');
   const [bannerBgType, setBannerBgType] = useState<'gradient' | 'image' | 'solid'>('gradient');
   const [bannerBgUrl, setBannerBgUrl] = useState(BANNER_BG_PRESETS[0].url);
   const [unsplashKeyword, setUnsplashKeyword] = useState('');
   const [overlayOpacity, setOverlayOpacity] = useState(0.6);
   const [isGeneratingBanner, setIsGeneratingBanner] = useState(false);
+  const [designError, setDesignError] = useState('');
+
 
   // === CANVAS INTERACTIVO ===
   const [bannerFormat, setBannerFormat] = useState<BannerFormat>('standard');
@@ -397,6 +403,11 @@ export default function VisualDesignHub({
         const subY = height * 0.4875 + s.dy;
         ctx.fillText(bannerSubtitle, subX, subY);
         registerText('subtitle', subX, subY, subFs, bannerSubtitle, 'center');
+        if (bannerCode || bannerExpiry) {
+          ctx.fillStyle = primaryColor;
+          ctx.font = `700 ${Math.max(16, subFs - 5)}px monospace`;
+          ctx.fillText([bannerCode ? `CÓDIGO ${bannerCode}` : '', bannerExpiry ? `HASTA ${bannerExpiry}` : ''].filter(Boolean).join('  ·  '), width / 2, subY + subFs * 1.5);
+        }
 
         // Botón CTA falso
         const c = off('cta');
@@ -637,7 +648,7 @@ export default function VisualDesignHub({
       drawOverlaysAndFinish();
     }
   }, [
-    bannerLayout, bannerTitle, bannerSubtitle, bannerCtaText, bannerBadgeText,
+    bannerLayout, bannerTitle, bannerSubtitle, bannerCtaText, bannerBadgeText, bannerCode, bannerExpiry,
     bannerBgType, bannerBgUrl, primaryColor, accentColor, gradientStart,
     gradientEnd, bodyBgColor, overlayOpacity, brand,
     bannerFormat, elementStyles, selectedElement, styleKey,
@@ -762,7 +773,7 @@ export default function VisualDesignHub({
     if (bannerBgType === 'image') {
       const cached = bgImageCacheRef.current.get(bannerBgUrl);
       if (!cached || !cached.complete || cached.naturalWidth === 0) {
-        alert('La imagen de fondo todavía se está cargando — esperá un segundo y volvé a intentar.');
+        setDesignError('La imagen de fondo todavía se está cargando. Espera un segundo y vuelve a intentar.');
         return;
       }
     }
@@ -784,14 +795,15 @@ export default function VisualDesignHub({
 
       const asset = await uploadAsset(file, brandId, { 
         kind: 'tile', 
-        altText: bannerTitle || 'Banner Adset generado' 
+        altText: bannerTitle || 'Banner Adset generado',
+        intendedUse: offer ? `offer:${offer.id}` : 'campaign-adset',
       });
 
       onInjectAdset(asset.url);
       onClose();
     } catch (err) {
       console.error('Error al generar y subir adset:', err);
-      alert('Hubo un error al generar y guardar el adset promocional.');
+      setDesignError(err instanceof Error ? err.message : 'Hubo un error al generar y guardar el adset promocional.');
     } finally {
       setIsGeneratingBanner(false);
       // Restaurar la vista interactiva (outline de selección)
@@ -1045,6 +1057,7 @@ export default function VisualDesignHub({
             {/* TAB 2: ADSET & BANNER BUILDER */}
             {activeTab === 'banners' && (
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24, width: '100%' }}>
+                {designError ? <div className="login-error" role="alert" style={{ gridColumn: '1 / -1' }}>{designError}</div> : null}
                 
                 {/* Left Side: Design Workspace (Interactive Canvas) */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1231,7 +1244,7 @@ export default function VisualDesignHub({
                     </div>
 
                     {bannerLayout === 'coupon' ? (
-                      <div className="form-group">
+                      <div className="form-group" style={{ display: 'grid', gap: 6 }}>
                         <label htmlFor="banner-badge-input" className="form-label"><Type size={13} style={{ display: 'inline', marginRight: 4 }} /> Texto Descuento (Badge)</label>
                         <input 
                           id="banner-badge-input"
@@ -1241,6 +1254,8 @@ export default function VisualDesignHub({
                           placeholder="Ej: 30% OFF o $50" 
                           style={{ fontSize: 12 }}
                         />
+                        <input className="form-input" value={bannerCode} onChange={e => setBannerCode(e.target.value)} placeholder="Código del cupón" aria-label="Código del cupón" />
+                        <input className="form-input" value={bannerExpiry} onChange={e => setBannerExpiry(e.target.value)} placeholder="Vigencia" aria-label="Vigencia del cupón" />
                       </div>
                     ) : (
                       <div className="form-group">

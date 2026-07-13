@@ -16,13 +16,14 @@ export async function listAssets(
 export async function uploadAsset(
   file: File,
   brandId: string,
-  metadata: { kind?: EmailAsset['kind']; altText?: string } = {},
+  metadata: { kind?: EmailAsset['kind']; altText?: string; intendedUse?: string } = {},
 ): Promise<EmailAsset> {
   const form = new FormData();
   form.append('file', file);
   form.append('brandId', brandId);
   form.append('kind', metadata.kind || 'other');
   form.append('altText', metadata.altText || file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' '));
+  if (metadata.intendedUse) form.append('intendedUse', metadata.intendedUse);
   const res = await fetch('/api/assets', { method: 'POST', body: form });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Error al subir el archivo');

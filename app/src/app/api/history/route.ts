@@ -12,7 +12,13 @@ export async function GET(req: Request) {
     const limitParam = url.searchParams.get('limit');
     const rawLimit = limitParam ? Number.parseInt(limitParam, 10) : undefined;
     const limit = rawLimit && Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : undefined;
-    const entries = await listHistory(brandId, limit, q);
+    const archivedParam = url.searchParams.get('archived');
+    const pinnedParam = url.searchParams.get('pinned');
+    const entries = await listHistory(brandId, limit, q, {
+      archived: archivedParam === null ? undefined : archivedParam === 'true',
+      pinned: pinnedParam === null ? undefined : pinnedParam === 'true',
+      before: url.searchParams.get('before') || undefined,
+    });
     return NextResponse.json(entries);
   } catch (error) {
     const authResponse = authenticationErrorResponse(error);
@@ -29,6 +35,8 @@ export async function POST(req: Request) {
     if (!parsed.success) return NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 });
     const entry = parsed.data;
     const saved = await addHistoryEntry(entry, user.id);
+    const { createHistoryVersion } = await import('@/lib/server/historyVersionStore');
+    await createHistoryVersion(saved, 'manual');
     return NextResponse.json(saved, { status: 201 });
   } catch (error) {
     const authResponse = authenticationErrorResponse(error);

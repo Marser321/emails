@@ -22,6 +22,8 @@ export interface EmailHtmlChecks {
     /** http:// sin TLS — algunos clientes lo marcan como inseguro */
     insecure: number;
   };
+  mergeFields: { total: number; unknown: string[] };
+  suspiciousBlackBackgrounds: number;
 }
 
 // Gmail recorta alrededor de 102 KB; avisamos desde 90 para dejar margen.
@@ -66,11 +68,18 @@ export function analyzeEmailHtml(html: string): EmailHtmlChecks {
     else if (/^http:\/\//i.test(value)) insecureLinks++;
   }
 
+  const allowedMergeFields = new Set(['contact.name', 'contact.first_name', 'contact.last_name', 'contact.email', 'contact.phone', 'contact.company_name', 'contact.address1', 'contact.city', 'contact.state', 'location.full_address', 'unsubscribe']);
+  const mergeFields = [...html.matchAll(/{{\s*([a-zA-Z0-9_.-]+)\s*}}/g)].map(match => match[1]);
+  const unknown = [...new Set(mergeFields.filter(field => !allowedMergeFields.has(field)))];
+  const suspiciousBlackBackgrounds = (html.match(/(?:background(?:-color)?\s*:\s*#(?:000000|000)\b|bgcolor=["']#(?:000000|000)["'])/gi) || []).length;
+
   return {
     weightKB,
     gmailClip,
     images: { total: imgTags.length, missingAlt, local: localImages },
     links: { total: totalLinks, empty: emptyLinks, insecure: insecureLinks },
+    mergeFields: { total: mergeFields.length, unknown },
+    suspiciousBlackBackgrounds,
   };
 }
 
@@ -94,5 +103,7 @@ export function listEmailIssues(checks: EmailHtmlChecks): string[] {
   if (checks.links.insecure > 0) {
     issues.push(`${checks.links.insecure} ${checks.links.insecure === 1 ? 'enlace' : 'enlaces'} http:// sin TLS.`);
   }
+  if (checks.mergeFields.unknown.length) issues.push(`Variables GHL desconocidas: ${checks.mergeFields.unknown.join(', ')}.`);
+  if (checks.suspiciousBlackBackgrounds > 0) issues.push(`${checks.suspiciousBlackBackgrounds} fondo(s) negro(s) requieren revisión visual.`);
   return issues;
 }

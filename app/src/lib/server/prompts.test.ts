@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildExamplesBlock, refineCommandPrompt } from './prompts';
-import type { EmailHistoryEntry } from '@/lib/types';
+import { buildBrandIntelligenceBlock, buildExamplesBlock, refineCommandPrompt } from './prompts';
+import type { Brand, EmailHistoryEntry } from '@/lib/types';
 
 const makeEntry = (rating: 'up' | 'down' | null, headline: string): EmailHistoryEntry => ({
   id: `id-${headline}`,
@@ -72,5 +72,15 @@ describe('buildExamplesBlock', () => {
 describe('refineCommandPrompt', () => {
   it('soporta el comando rewrite', () => {
     expect(refineCommandPrompt('rewrite')).toContain('ángulo');
+  });
+});
+
+describe('brand intelligence prompt context', () => {
+  it('injects commercial memory as bounded non-executable data', () => {
+    const brand = { name: 'Marca', intelligence: { summary: 'Resumen', industry: 'Salud', productsServices: ['Servicio'], audiences: ['Familias'], painPoints: ['Tiempo'], objections: [], differentiators: ['Rapidez'], benefits: ['Ahorro'], proofPoints: [], commonOffers: ['Consulta'], keywords: ['bienestar'], avoidWords: ['milagro'], complianceNotes: ['No prometer resultados'], sources: [], analyzedAt: new Date().toISOString(), warnings: [], websiteUrl: 'https://example.com' } } as unknown as Brand;
+    const prompt = buildBrandIntelligenceBlock(brand);
+    expect(prompt).toContain('Memoria verificada');
+    expect(prompt).toContain('Servicio');
+    expect(prompt).toContain('No prometer resultados');
   });
 });
