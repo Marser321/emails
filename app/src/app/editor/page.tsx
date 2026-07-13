@@ -875,15 +875,30 @@ function EditorContent() {
   };
 
   // AI Prompt actions
-  const hasKeyForEngine = (engine: AIEngine) =>
+  const hasKeyForEngine = (engine: AIEngine, currentSettings: PublicSettings | null = settings) =>
     engine === 'claude'
-      ? Boolean(settings?.hasAnthropicKey)
+      ? Boolean(currentSettings?.hasAnthropicKey)
       : engine === 'groq'
-        ? Boolean(settings?.hasGroqKey)
-        : Boolean(settings?.hasGeminiKey);
+        ? Boolean(currentSettings?.hasGroqKey)
+        : Boolean(currentSettings?.hasGeminiKey);
 
-  const handleOpenAiModal = () => {
-    if (!hasKeyForEngine(selectedEngine)) {
+  const handleOpenAiModal = async () => {
+    let currentSettings = settings;
+    let currentEngine = selectedEngine;
+    if (!currentSettings) {
+      try {
+        const response = await fetch('/api/settings');
+        if (response.ok) {
+          currentSettings = await response.json() as PublicSettings;
+          currentEngine = currentSettings.defaultEngine;
+          setSettings(currentSettings);
+          setSelectedEngine(currentEngine);
+        }
+      } catch {
+        // El modal de estado explica qué configuración falta si la consulta no responde.
+      }
+    }
+    if (!hasKeyForEngine(currentEngine, currentSettings)) {
       setApiKeyModalOpen(true);
     } else {
       setAiPromptModalOpen(true);

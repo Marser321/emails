@@ -198,6 +198,22 @@ test('inline AI and preview click focus the exact canvas field', async ({ page }
   await expect(page.locator('[data-block-field="headline"] input')).toHaveValue('Titular refinado por IA');
 });
 
+test('generation waits for provider settings and opens the campaign brief', async ({ page }) => {
+  await mockWorkspace(page);
+  await page.route('**/api/settings', async route => {
+    await new Promise(resolve => setTimeout(resolve, 700));
+    await route.fulfill({ json: {
+      hasGeminiKey: true, hasGroqKey: true, hasAnthropicKey: false, defaultEngine: 'gemini',
+      assetsPublicBaseUrl: '', supabaseAssetsBaseUrl: '',
+    } });
+  });
+  await page.goto('/editor', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: /Generar con IA/ }).click();
+  await expect(page.getByRole('heading', { name: /Generar Copy con IA/ })).toBeVisible();
+  await expect(page.getByLabel('Oferta reutilizable')).toBeVisible();
+  await expect(page.getByLabel('¿De qué trata este correo?')).toBeVisible();
+});
+
 test('generate, autosave, library and reopen preserve the latest content', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await mockWorkspace(page);
