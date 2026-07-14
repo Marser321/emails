@@ -1,15 +1,15 @@
 [
   {
     "id": "cana-vacations-guia-turistica-entrega",
-    "name": "Cana Vacations — Entrega de guía turística",
+    "name": "Cana Vacations — Descargar mi guía",
     "brandName": "Cana Vacations",
     "templateName": "Registro",
     "brandId": "cana-vacations",
     "template": "registration",
     "date": "2026-07-14T00:00:00.000Z",
     "content": {
-      "subject": "Tu guía gratuita de Punta Cana ya está lista ✈️",
-      "preheader": "Descarga tu guía y empieza a planear una experiencia inolvidable en Punta Cana.",
+      "subject": "Tu guía de Punta Cana ya está lista ✈️",
+      "preheader": "Tu guía turística ya está lista para descargar.",
       "emailWidth": 600,
       "emailBgColor": "#F3F7F9",
       "bodyBgColor": "#FFFFFF",
@@ -34,42 +34,16 @@
           "type": "header"
         },
         {
-          "id": "cana-guide-band",
-          "type": "band",
-          "bgColor": "#00C1CF",
-          "useGradient": true,
-          "gradientStart": "#00C1CF",
-          "gradientEnd": "#FFAB53",
-          "height": 6
-        },
-        {
-          "id": "cana-guide-badge",
-          "type": "badge",
-          "text": "GUÍA TURÍSTICA GRATUITA",
-          "bgColor": "#FFF1E4",
-          "textColor": "#B85F17",
-          "align": "center"
-        },
-        {
           "id": "cana-guide-message",
           "type": "text",
           "headline": "Tu guía de Punta Cana ya está lista",
-          "body": "Hola {{contact.first_name}},\n\nGracias por registrarte. Preparamos esta guía para ayudarte a imaginar, organizar y disfrutar cada momento de tu próxima visita a Punta Cana.\n\nDescárgala ahora y guárdala para tenerla siempre a mano mientras planeas tu viaje."
-        },
-        {
-          "id": "cana-guide-callout",
-          "type": "callout",
-          "emoji": "✈️",
-          "title": "Empieza a planear con más claridad",
-          "body": "Encontrarás recomendaciones útiles para que tu experiencia en Punta Cana se sienta más simple, especial y memorable.",
-          "bgColor": "#E8F9FA",
-          "accentColor": "#00C1CF"
+          "body": "Hola {{contact.first_name}},\n\nHaz clic en el botón para descargar tu guía turística."
         },
         {
           "id": "cana-guide-cta",
           "type": "cta",
-          "preCta": "Tu guía está lista para descargar:",
-          "ctaText": "DESCARGAR MI GUÍA GRATUITA",
+          "preCta": "",
+          "ctaText": "DESCARGAR MI GUÍA",
           "ctaUrl": "https://fjqrrqvyydhabqkendpb.supabase.co/storage/v1/object/public/lead-magnets/cana-vacations/guia-turistica-punta-cana.pdf",
           "ctaBgColor": "#FFAB53",
           "ctaTextColor": "#12203D",
@@ -80,7 +54,7 @@
         {
           "id": "cana-guide-footer",
           "type": "footer",
-          "footerNote": "Guarda este correo para volver a tu guía cuando quieras."
+          "footerNote": ""
         }
       ]
     }

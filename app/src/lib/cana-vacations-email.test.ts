@@ -27,7 +27,7 @@ describe('Cana Vacations guide delivery email', () => {
       brandId: 'cana-vacations',
       template: 'registration',
       content: {
-        subject: 'Tu guía gratuita de Punta Cana ya está lista ✈️',
+        subject: 'Tu guía de Punta Cana ya está lista ✈️',
       },
     });
 
@@ -35,7 +35,8 @@ describe('Cana Vacations guide delivery email', () => {
     const checks = analyzeEmailHtml(html);
 
     expect(html).toContain('href="https://fjqrrqvyydhabqkendpb.supabase.co/storage/v1/object/public/lead-magnets/cana-vacations/guia-turistica-punta-cana.pdf"');
-    expect(html).toContain('DESCARGAR MI GUÍA GRATUITA');
+    expect(draft!.content.blocks?.map(block => block.type)).toEqual(['header', 'text', 'cta', 'footer']);
+    expect(html).toContain('DESCARGAR MI GUÍA');
     expect(html).toContain('<v:roundrect');
     expect(checks.images.missingAlt).toBe(0);
     expect(checks.links.empty).toBe(0);
