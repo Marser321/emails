@@ -70,7 +70,7 @@
           "type": "cta",
           "preCta": "Tu guía está lista para descargar:",
           "ctaText": "DESCARGAR MI GUÍA GRATUITA",
-          "ctaUrl": "{{custom_values.cana_guide_download_url}}",
+          "ctaUrl": "https://fjqrrqvyydhabqkendpb.supabase.co/storage/v1/object/public/lead-magnets/cana-vacations/guia-turistica-punta-cana.pdf",
           "ctaBgColor": "#FFAB53",
           "ctaTextColor": "#12203D",
           "ctaRadius": 24,

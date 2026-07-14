@@ -34,7 +34,7 @@ describe('Cana Vacations guide delivery email', () => {
     const html = renderEmail(brand!, draft!.content);
     const checks = analyzeEmailHtml(html);
 
-    expect(html).toContain('href="{{custom_values.cana_guide_download_url}}"');
+    expect(html).toContain('href="https://fjqrrqvyydhabqkendpb.supabase.co/storage/v1/object/public/lead-magnets/cana-vacations/guia-turistica-punta-cana.pdf"');
     expect(html).toContain('DESCARGAR MI GUÍA GRATUITA');
     expect(html).toContain('<v:roundrect');
     expect(checks.images.missingAlt).toBe(0);
