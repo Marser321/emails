@@ -346,5 +346,25 @@
     "intendedUse": "Tile 3 de 3 del adset Financial Confidence",
     "adset": "financial-confidence",
     "path": "amo/adsets/financial-confidence-3.jpg"
+  },
+  {
+    "id": "starter-cana-vacations-logo-on-dark",
+    "filename": "cana-vacations-logo-on-dark.png",
+    "brandId": "cana-vacations",
+    "brand": "Cana Vacations",
+    "url": "/email-assets/cana-vacations/logos/cana-vacations-logo-on-dark.png",
+    "size": 469430,
+    "modifiedAt": "2026-07-14T00:00:00.000Z",
+    "createdAt": "2026-07-14T00:00:00.000Z",
+    "kind": "logo",
+    "altText": "Logo de Cana Vacations",
+    "width": 640,
+    "height": 640,
+    "mimeType": "image/png",
+    "hasAlpha": true,
+    "variant": "email",
+    "author": "Cana Vacations",
+    "intendedUse": "Logo oficial para el header y footer de emails de Cana Vacations",
+    "path": "cana-vacations/logos/cana-vacations-logo-on-dark.png"
   }
 ]

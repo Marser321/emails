@@ -49,6 +49,12 @@ describe('analyzeEmailHtml', () => {
     expect(checks.mergeFields.unknown).toEqual(['contact.magic']);
     expect(checks.suspiciousBlackBackgrounds).toBe(1);
   });
+
+  it('acepta la variable GHL configurada para la descarga de la guía Cana Vacations', () => {
+    const checks = analyzeEmailHtml(baseHtml('<a href="{{custom_values.cana_guide_download_url}}">Descargar guía</a>'));
+    expect(checks.mergeFields.unknown).toEqual([]);
+    expect(listEmailIssues(checks)).toEqual([]);
+  });
 });
 
 describe('listEmailIssues', () => {

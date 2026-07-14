@@ -1,1 +1,88 @@
-[]
+[
+  {
+    "id": "cana-vacations-guia-turistica-entrega",
+    "name": "Cana Vacations — Entrega de guía turística",
+    "brandName": "Cana Vacations",
+    "templateName": "Registro",
+    "brandId": "cana-vacations",
+    "template": "registration",
+    "date": "2026-07-14T00:00:00.000Z",
+    "content": {
+      "subject": "Tu guía gratuita de Punta Cana ya está lista ✈️",
+      "preheader": "Descarga tu guía y empieza a planear una experiencia inolvidable en Punta Cana.",
+      "emailWidth": 600,
+      "emailBgColor": "#F3F7F9",
+      "bodyBgColor": "#FFFFFF",
+      "primaryColor": "#12203D",
+      "accentColor": "#FFAB53",
+      "gradientStart": "#00C1CF",
+      "gradientEnd": "#FFAB53",
+      "headerBgColor": "#12203D",
+      "footerBgColor": "#12203D",
+      "typography": {
+        "headingFont": "Poppins",
+        "bodyFont": "Poppins",
+        "headingColor": "#12203D",
+        "bodyColor": "#334155",
+        "mutedColor": "#64748B",
+        "linkColor": "#00A7B2",
+        "ctaTextColor": "#12203D"
+      },
+      "blocks": [
+        {
+          "id": "cana-guide-header",
+          "type": "header"
+        },
+        {
+          "id": "cana-guide-band",
+          "type": "band",
+          "bgColor": "#00C1CF",
+          "useGradient": true,
+          "gradientStart": "#00C1CF",
+          "gradientEnd": "#FFAB53",
+          "height": 6
+        },
+        {
+          "id": "cana-guide-badge",
+          "type": "badge",
+          "text": "GUÍA TURÍSTICA GRATUITA",
+          "bgColor": "#FFF1E4",
+          "textColor": "#B85F17",
+          "align": "center"
+        },
+        {
+          "id": "cana-guide-message",
+          "type": "text",
+          "headline": "Tu guía de Punta Cana ya está lista",
+          "body": "Hola {{contact.first_name}},\n\nGracias por registrarte. Preparamos esta guía para ayudarte a imaginar, organizar y disfrutar cada momento de tu próxima visita a Punta Cana.\n\nDescárgala ahora y guárdala para tenerla siempre a mano mientras planeas tu viaje."
+        },
+        {
+          "id": "cana-guide-callout",
+          "type": "callout",
+          "emoji": "✈️",
+          "title": "Empieza a planear con más claridad",
+          "body": "Encontrarás recomendaciones útiles para que tu experiencia en Punta Cana se sienta más simple, especial y memorable.",
+          "bgColor": "#E8F9FA",
+          "accentColor": "#00C1CF"
+        },
+        {
+          "id": "cana-guide-cta",
+          "type": "cta",
+          "preCta": "Tu guía está lista para descargar:",
+          "ctaText": "DESCARGAR MI GUÍA GRATUITA",
+          "ctaUrl": "{{custom_values.cana_guide_download_url}}",
+          "ctaBgColor": "#FFAB53",
+          "ctaTextColor": "#12203D",
+          "ctaRadius": 24,
+          "ctaFullWidth": true,
+          "ctaSize": "lg"
+        },
+        {
+          "id": "cana-guide-footer",
+          "type": "footer",
+          "footerNote": "Guarda este correo para volver a tu guía cuando quieras."
+        }
+      ]
+    }
+  }
+]

@@ -68,7 +68,7 @@ export function analyzeEmailHtml(html: string): EmailHtmlChecks {
     else if (/^http:\/\//i.test(value)) insecureLinks++;
   }
 
-  const allowedMergeFields = new Set(['contact.name', 'contact.first_name', 'contact.last_name', 'contact.email', 'contact.phone', 'contact.company_name', 'contact.address1', 'contact.city', 'contact.state', 'location.full_address', 'unsubscribe']);
+  const allowedMergeFields = new Set(['contact.name', 'contact.first_name', 'contact.last_name', 'contact.email', 'contact.phone', 'contact.company_name', 'contact.address1', 'contact.city', 'contact.state', 'location.full_address', 'unsubscribe', 'custom_values.cana_guide_download_url']);
   const mergeFields = [...html.matchAll(/{{\s*([a-zA-Z0-9_.-]+)\s*}}/g)].map(match => match[1]);
   const unknown = [...new Set(mergeFields.filter(field => !allowedMergeFields.has(field)))];
   const suspiciousBlackBackgrounds = (html.match(/(?:background(?:-color)?\s*:\s*#(?:000000|000)\b|bgcolor=["']#(?:000000|000)["'])/gi) || []).length;

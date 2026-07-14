@@ -64,6 +64,122 @@
     "updatedAt": "2026-07-05T02:22:26.787Z"
   },
   {
+    "name": "Cana Vacations",
+    "category": "Turismo y experiencias",
+    "colors": {
+      "primary": "#12203D",
+      "accent": "#FFAB53",
+      "gradientStart": "#00C1CF",
+      "gradientEnd": "#FFAB53",
+      "headerBg": "#12203D",
+      "footerBg": "#12203D"
+    },
+    "fonts": {
+      "heading": "Poppins",
+      "body": "Poppins"
+    },
+    "logo": {
+      "type": "image",
+      "value": "/email-assets/cana-vacations/logos/cana-vacations-logo-on-dark.png",
+      "imageWidth": 190,
+      "showName": false
+    },
+    "footer": {
+      "tagline": "Diseñamos tus viajes, creamos tus memorias.",
+      "subtitle": "Excursiones y experiencias VIP en Punta Cana",
+      "disclaimer": "Recibiste este correo porque solicitaste la guía turística gratuita de Cana Vacations. Si no deseas recibir más comunicaciones, puedes cancelar tu suscripción en el enlace de abajo.",
+      "address": "Punta Cana, República Dominicana · Charlotte, Carolina del Norte, EE.UU.",
+      "unsubscribeLabel": "Cancelar suscripción",
+      "unsubscribeUrl": "{{unsubscribe}}"
+    },
+    "voice": {
+      "toneOfVoice": "Cálido, experto local y aspiracional sin presión.",
+      "audience": "Viajeros hispanohablantes que planean una visita a Punta Cana.",
+      "styleNotes": "Comunicación clara, cercana y premium; resalta experiencias, logística simple y atención personal.",
+      "samplePhrases": [
+        "Diseñamos tus viajes, creamos tus memorias.",
+        "Tu experiencia en Punta Cana empieza aquí.",
+        "Viaja con más claridad y disfruta cada momento."
+      ]
+    },
+    "intelligence": {
+      "websiteUrl": "https://web.canavacations.com/paquetes",
+      "summary": "Agencia de excursiones y experiencias Classic y VIP en Punta Cana, con atención bilingüe, recogida en hotel y apoyo local.",
+      "industry": "Turismo y experiencias",
+      "productsServices": [
+        "Excursiones en Punta Cana",
+        "Experiencias VIP",
+        "Hoteles, vuelos y alquiler de autos",
+        "Paquetes personalizados"
+      ],
+      "audiences": [
+        "Viajeros que visitan Punta Cana",
+        "Familias, parejas y grupos",
+        "Personas interesadas en excursiones Classic y VIP"
+      ],
+      "painPoints": [
+        "Planificar una visita a Punta Cana",
+        "Comparar excursiones y logística",
+        "Coordinar recogidas y reservas"
+      ],
+      "objections": [
+        "Qué incluye cada excursión",
+        "Disponibilidad y horarios de recogida",
+        "Flexibilidad ante cambios de clima"
+      ],
+      "differentiators": [
+        "Atención de expertos locales",
+        "Planes Classic y VIP",
+        "Asistencia bilingüe por WhatsApp"
+      ],
+      "benefits": [
+        "Planificación más simple",
+        "Experiencias diseñadas para crear recuerdos",
+        "Acompañamiento antes y durante la visita"
+      ],
+      "proofPoints": [
+        "Operación desde 2017",
+        "Atención en español e inglés",
+        "Oficinas en Punta Cana y Charlotte"
+      ],
+      "commonOffers": [
+        "Guía turística gratuita",
+        "Excursiones Classic y VIP",
+        "Cotizaciones personalizadas"
+      ],
+      "keywords": [
+        "Punta Cana",
+        "excursiones",
+        "VIP",
+        "guía turística",
+        "memorias"
+      ],
+      "avoidWords": [
+        "barato",
+        "garantizado",
+        "sin preocupaciones"
+      ],
+      "complianceNotes": [
+        "Mantener la política de cancelación y condiciones de cada operador fuera del email de entrega de guía.",
+        "Incluir una baja funcional en campañas de marketing."
+      ],
+      "sources": [
+        {
+          "url": "https://web.canavacations.com/paquetes",
+          "label": "Sitio de Cana Vacations",
+          "kind": "website",
+          "analyzedAt": "2026-07-14T00:00:00.000Z"
+        }
+      ],
+      "analyzedAt": "2026-07-14T00:00:00.000Z",
+      "warnings": []
+    },
+    "isFavorite": true,
+    "id": "cana-vacations",
+    "createdAt": "2026-07-14T00:00:00.000Z",
+    "updatedAt": "2026-07-14T00:00:00.000Z"
+  },
+  {
     "name": "Luxe Properties",
     "category": "Real Estate",
     "colors": {
